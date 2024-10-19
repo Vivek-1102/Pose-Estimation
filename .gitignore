@@ -1,0 +1,29 @@
+# Common patterns
+node_modules/
+.idea/
+.parcel-cache/
+build/
+coverage/
+public/
+env.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# React-specific patterns
+client/build/
+client/public/
+client/src/
+
+# Express-specific patterns
+server/node_modules/
+server/logs/
+server/config/
+
+# MongoDB-specific patterns
+.mongorc.js
+.mongod.conf
+
+# Additional patterns
+!.gitignore
+!.DS_Store
