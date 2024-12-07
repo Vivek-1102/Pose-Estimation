@@ -24,7 +24,7 @@ let model;
 (async () => {
     await tf.ready();
     try {
-        model = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
+         model = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
             modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
         });
         console.log('Model loaded successfully');

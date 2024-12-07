@@ -1,7 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { Upload, Camera, Dumbbell, Flower, Activity, Microscope } from 'lucide-react';
 import Webcam from "react-webcam";
-import axios from "axios";
 
 // Shadcn UI components
 const Button = React.forwardRef(({ className, ...props }, ref) => {
@@ -11,7 +10,7 @@ const Button = React.forwardRef(({ className, ...props }, ref) => {
       ref={ref}
       {...props}
     />
-  );
+  )
 });
 
 const Card = ({ className, ...props }) => (
@@ -40,96 +39,36 @@ export default function PoseEstimationFrontPage() {
   const [result, setResult] = useState(null);
   const webcamRef = useRef(null);
 
-  const uploadPhoto = async (blob) => {
-    const formData = new FormData();
-    formData.append('image', blob, 'captured.jpg');
-
-    try {
-      const response = await axios.post('http://localhost:5000/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        responseType: 'blob', // Important to set this for binary response
-      });
-
-      if (response.status === 200 && response.data) {
-        // Create an object URL for the image
-        const imageUrl = URL.createObjectURL(response.data);
-        // Set the image URL as the result
-        setResult(imageUrl);
-      } else {
-        console.error('No image returned from the server');
-      }
-
-    } catch (error) {
-      console.error('Error uploading the file:', error);
-    }
-  };
-
   const handleFileChange = (event) => {
-    setIsWebcamOpen(false);
-    const file = event.target.files[0];
-    if (file && (file.type === 'image/jpeg' || file.type === 'image/png')) {
+    if (event.target.files && event.target.files[0]) {
+      const file = event.target.files[0];
       const reader = new FileReader();
-      reader.onload = async () => {
-        const blob = new Blob([reader.result], { type: file.type });
-         await uploadPhoto(blob);
+      reader.onload = (e) => {
+        setSelectedImage(e.target.result);
+        // Simulating pose estimation result
+        setResult("Pose estimation results will be displayed here.");
       };
-      reader.readAsArrayBuffer(file);
-    } else {
-      console.error('Unsupported file type. Please upload a JPEG or PNG image.');
+      reader.readAsDataURL(file);
     }
   };
 
   const handleWebcam = () => {
     setIsWebcamOpen(prev => !prev);
     if (isWebcamOpen) {
-      // Reset states when closing the webcam
-      setSelectedImage(null);
-      setResult(null);
-    } else {
-      // Reset states when opening the webcam
       setSelectedImage(null);
       setResult(null);
     }
   };
 
   const captureImage = useCallback(() => {
-    const file = webcamRef.current?.getScreenshot();
-    if (file) {
-      console.log("Enter");
-      setSelectedImage(file);
+    const imageSrc = webcamRef.current?.getScreenshot();
+    if (imageSrc) {
+      setSelectedImage(imageSrc);
       setIsWebcamOpen(false);
-  
-      // Convert base64 to Blob
-      const base64ToBlob = (base64String) => {
-        const byteString = atob(base64String.split(',')[1]); // Decode base64
-        const mimeString = base64String.split(',')[0].split(':')[1].split(';')[0]; // Extract mime type
-        const byteArray = new Uint8Array(byteString.length);
-  
-        for (let i = 0; i < byteString.length; i++) {
-          byteArray[i] = byteString.charCodeAt(i);
-        }
-  
-        return new Blob([byteArray], { type: mimeString });
-      };
-  
-      const blob = base64ToBlob(file);
-      const reader = new FileReader();
-      
-      reader.onload = async () => {
-        console.log("In the onload");
-        const finalBlob = new Blob([reader.result], { type: blob.type });
-        console.log(finalBlob);
-        await uploadPhoto(finalBlob);
-      };
-      
-      reader.readAsArrayBuffer(blob);
-    } else {
-      console.error('Unsupported file type. Please upload a JPEG or PNG image.');
+      // Simulating pose estimation result
+      setResult("Pose estimation results for captured image will be displayed here.");
     }
-  }, [webcamRef, uploadPhoto]);
-  
+  }, [webcamRef]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-100 to-gray-200">
@@ -144,8 +83,8 @@ export default function PoseEstimationFrontPage() {
           <h2 className="text-4xl font-bold text-gray-900 mb-4">Unlock the Power of Pose Estimation</h2>
           <p className="text-xl text-gray-600 mb-8">Analyze and improve your form with cutting-edge AI technology</p>
           <div className="flex flex-col items-center gap-4">
-            <div className="flex gap-4">
-              <Button className="bg-black text-white text-lg px-6 py-3 hover:bg-black/90" onClick={() => document.getElementById('fileInput').click()}>
+            <div className="flex gap-4 flex-wrap justify-center">
+              <Button className="bg-black text-white text-lg px-6 py-3 hover:bg-black/90"  onClick={() => document.getElementById('fileInput').click()}>
                 <Upload className="mr-2 h-5 w-5" /> Upload Photo
               </Button>
               <input
@@ -155,45 +94,51 @@ export default function PoseEstimationFrontPage() {
                 accept="image/*"
                 onChange={handleFileChange}
               />
-              <Button className="text-lg px-6 py-3" onClick={handleWebcam}>
+              <Button className="text-lg px-6 py-3" variant="outline" onClick={handleWebcam}>
                 <Camera className="mr-2 h-5 w-5" /> {isWebcamOpen ? 'Close Webcam' : 'Open Webcam'}
               </Button>
             </div>
             {isWebcamOpen && (
-              
-                
-                <div className="flex justify-center items-center h-screen">
-                 <div className="flex flex-col items-center">
-                   <Webcam
-                   audio={false}
-                   ref={webcamRef}
-                   screenshotFormat="image/jpeg"
-                   className="rounded-lg shadow-lg w-full justify-center"
-                  />
-                  <Button className="mt-4 bg-black text-white text-lg px-6 py-3 hover:bg-black/90" onClick={captureImage}>
-                   Capture Image
-                  </Button>
-                 </div>
-               </div>
-
-                
-                
-              
-            )}
-            {result && (
-              <div className="mt-8 w-full max-w-4xl">
-                <h3 className="text-2xl font-bold text-gray-900 mb-4">Analysis Result</h3>
-                <div className='flex justify-center'>
-                  {/* <div>
-                    <img src={} alt="Processed Pose" className="w-full rounded-lg shadow-lg" />
-                  </div> */}
-                  <Card className="h-full justify-center">
+              <div className="mt-4 w-full max-w-3xl">
+                <div className="flex flex-col lg:flex-row gap-4">
+                  <div className="flex-1">
+                    <Webcam
+                      audio={false}
+                      ref={webcamRef}
+                      screenshotFormat="image/jpeg"
+                      className="rounded-lg shadow-lg w-full"
+                    />
+                    <Button className="mt-4 text-lg px-6 py-3" onClick={captureImage}>
+                      Capture Image
+                    </Button>
+                  </div>
+                  <Card className="flex-1">
                     <CardHeader>
-                      <CardTitle><img src={result} alt="Annotated Pose" style={{ maxWidth: '100%', maxHeight: '500px' }} /></CardTitle>
+                      <CardTitle>Live Pose Estimation</CardTitle>
                     </CardHeader>
-                    {/* <CardContent>
-                      <p className="text-gray-600">Pose estimation result will be shown here based on the processed image.</p>
-                    </CardContent> */}
+                    <CardContent>
+                      <p className="text-gray-600">
+                        Real-time pose estimation results will be displayed here when implemented.
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            )}
+            {selectedImage && (
+              <div className="mt-8 w-full max-w-3xl">
+                <h3 className="text-2xl font-bold text-gray-900 mb-4">Analysis Results</h3>
+                <div className="flex flex-col lg:flex-row gap-4">
+                  <div className="flex-1">
+                    <img src={selectedImage} alt="Selected" className="w-full rounded-lg shadow-lg" />
+                  </div>
+                  <Card className="flex-1">
+                    <CardHeader>
+                      <CardTitle>Pose Estimation Results</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-gray-600">{result}</p>
+                    </CardContent>
                   </Card>
                 </div>
               </div>
@@ -202,7 +147,7 @@ export default function PoseEstimationFrontPage() {
         </section>
 
         <section className="mb-16">
-          <div className="grid md:grid-cols-2 gap-8 items-center">
+        <div className="grid md:grid-cols-2 gap-8 items-center">
           <div className='pl-12'>
             <h3 className="text-3xl font-bold text-gray-900 mb-4">What is Pose Estimation?</h3>
             <p className="text-lg text-gray-600 mb-4">
@@ -215,18 +160,18 @@ export default function PoseEstimationFrontPage() {
            </p>
            </div>
             <div className="flex items-center justify-center w-full max-w-md h-64 rounded-lg overflow-hidden shadow-xl mx-auto">
-              <img
-                src="./pose2-image.jpg"
-                alt="Pose Estimation Visualization"
-                className="w-full h-full object-cover"
-              />
-            </div>
+            <img
+              src="./pose2-image.jpg"
+              alt="Pose Estimation Visualization"
+              className="w-full h-full object-cover"
+            />
           </div>
+        </div>
         </section>
 
         <section>
           <h3 className="text-3xl font-bold text-gray-900 mb-8 text-center">Applications of Pose Estimation</h3>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -234,42 +179,51 @@ export default function PoseEstimationFrontPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <CardDescription>Analyze movements for exercise form and injury prevention.</CardDescription>
+                <CardDescription>
+                  Improve workout form, track progress, and prevent injuries with real-time feedback on your exercises.
+                </CardDescription>
               </CardContent>
             </Card>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
-                  <Flower className="mr-2 h-5 w-5" /> Healthcare
+                  <Flower className="mr-2 h-5 w-5" /> Yoga
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <CardDescription>Track rehabilitation progress and assess physical therapy effectiveness.</CardDescription>
+                <CardDescription>
+                  Perfect your yoga poses with AI-assisted alignment guidance and personalized recommendations.
+                </CardDescription>
               </CardContent>
             </Card>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
-                  <Activity className="mr-2 h-5 w-5" /> Sports
+                  <Activity className="mr-2 h-5 w-5" /> Physical Therapy
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <CardDescription>Enhance athletic performance through detailed movement analysis.</CardDescription>
+                <CardDescription>
+                  Enhance rehabilitation processes with accurate movement analysis and progress tracking for patients.
+                </CardDescription>
               </CardContent>
             </Card>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
-                  <Microscope className="mr-2 h-5 w-5" /> Research
+                  <Microscope className="mr-2 h-5 w-5" /> Sports Science
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <CardDescription>Utilize pose estimation in behavioral studies and movement science.</CardDescription>
+                <CardDescription>
+                  Analyze athlete performance, refine techniques, and boost performance with detailed biomechanical insights.
+                </CardDescription>
               </CardContent>
             </Card>
           </div>
         </section>
       </main>
+
       <footer className="bg-white mt-16 py-8 shadow-inner">
         <div className="container mx-auto text-center">
           <p className="text-gray-500">&copy; 2024 PoseWithAI. All rights reserved.</p>
