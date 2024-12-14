@@ -41,7 +41,7 @@ let model;
     
     model = await poseDetection.createDetector(poseDetection.SupportedModels.BlazePose, {
       runtime: 'tfjs', // Specifies TensorFlow.js runtime
-      modelType: 'full', // Options: 'lite', 'full', 'heavy' (choose based on your requirements)
+      modelType: 'heavy', // Options: 'lite', 'full', 'heavy' (choose based on your requirements)
       enableSmoothing: true, // Smooths pose keypoints over time for stability
     });
     
@@ -113,7 +113,7 @@ const drawAnnotations = (keypoints, canvas, metric, angle) => {
   keypoints.forEach((kp) => {
     if (kp.score > 0.5) {
       ctx.beginPath();
-      ctx.arc(kp.x, kp.y, 10, 0, 2 * Math.PI);
+      ctx.arc(kp.x, kp.y, 3, 0, 2 * Math.PI);
       ctx.fill();
       ctx.fillText(kp.name, kp.x + 15, kp.y);
     }
@@ -123,6 +123,28 @@ const drawAnnotations = (keypoints, canvas, metric, angle) => {
     ctx.fillStyle = 'blue';
     ctx.fillText(`${metric}: ${angle.toFixed(2)}°`, 10, 50);
   }
+};
+
+const preprocessImage = (img, targetSize = 256) => {
+  const scale = Math.min(targetSize / img.width, targetSize / img.height); // Calculate scale
+  const newWidth = Math.round(img.width * scale);
+  const newHeight = Math.round(img.height * scale);
+
+  const canvas = createCanvas(targetSize, targetSize);
+  const ctx = canvas.getContext('2d');
+
+  // Fill the canvas with black (or another padding color)
+  ctx.fillStyle = "black";
+  ctx.fillRect(0, 0, targetSize, targetSize);
+
+  // Center the resized image
+  const offsetX = (targetSize - newWidth) / 2;
+  const offsetY = (targetSize - newHeight) / 2;
+  ctx.drawImage(img, offsetX, offsetY, newWidth, newHeight);
+
+  // Convert the canvas to a Tensor
+  const imgTensor = tf.browser.fromPixels(canvas).div(255.0).expandDims(0);
+  return imgTensor;
 };
 
 
@@ -162,16 +184,20 @@ app.post('/analyze-metrics', (req, res) => {
         const file = images[metric][0];
         const img = await loadImage(file.buffer);
         console.log(`Processing ${metric}: Image dimensions - Width: ${img.width}, Height: ${img.height}`);
-        const canvas = createCanvas(img.width, img.height);
+        const canvas = createCanvas(targetWidth, targetHeight);
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, img.width, img.height);
+        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+        let imgTensor = tf.browser.fromPixels(canvas).div(255.0);
+        console.log("Shape:",imgTensor.shape); 
+        
 
         console.log(`Estimating poses for ${metric}...`);
         const poses = await model.estimatePoses(canvas, {
           flipHorizontal: false,
           maxPoses: 1,
-          scoreThreshold: 0.2, // Lower threshold for detecting poses
+          scoreThreshold: 0.8, // Lower threshold for detecting poses
         });
+
 
         if (!poses.length) {
           console.log(`No poses detected for ${metric}`);
