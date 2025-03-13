@@ -30,11 +30,11 @@ const upload = multer({ storage }).fields([
     { name: 'footProgression', maxCount: 1 }
 ]);
 
-// Enhanced angle calculation class
+/// Enhanced angle calculation class
 class ClinicalAngleCalculator {
     static calculateAngle(p1, p2, p3) {
-        const radian = Math.atan2(p3.y - p2.y, p3.x - p2.x) - 
-                      Math.atan2(p1.y - p2.y, p1.x - p2.x);
+        const radian = Math.atan2(p3.y - p2.y, p3.x - p2.x) -
+                       Math.atan2(p1.y - p2.y, p1.x - p2.x);
         let angle = Math.abs((radian * 180) / Math.PI);
         if (angle > 180) angle = 360 - angle;
         return angle;
@@ -65,32 +65,42 @@ class ClinicalAngleCalculator {
                 const knee = getPoint('knee');
                 const hip = getPoint('hip');
                 if (!hip || !knee) return null;
-                const imaginaryPoint = { x: hip.x + 100, y: hip.y };
+
+                const imaginaryPoint = { x: hip.x - (side === 'right' ? 100 : -100), y: hip.y };
                 return this.calculateAngle(knee, hip, imaginaryPoint);
             },
 
             hipRotation: () => {
                 const knee = getPoint('knee');
                 const ankle = getPoint('ankle');
+                const hip = getPoint('hip');
                 if (!knee || !ankle) return null;
-                const imaginaryPoint = { x: knee.x, y: knee.y - 100 };
-                return this.calculateAngle(ankle, knee, imaginaryPoint);
+                return this.calculateAngle(ankle, knee, hip);
             },
 
             popliteal: () => {
-                const ankle = getPoint('ankle');
                 const knee = getPoint('knee');
-                if (!knee || !ankle) return null;
-                const imaginaryPoint = { x: knee.x, y: knee.y - 100 };
-                return this.calculateAngle(ankle, knee, imaginaryPoint);
+                const ankle = getPoint('ankle');
+                const imaginaryVertical = { x: knee.x, y: knee.y - 100 };
+                return this.validateAndCalculate([ankle, knee, imaginaryVertical], 
+                    () => this.calculateAngle(ankle, knee, imaginaryVertical));
             },
 
             footProgression: () => {
-                const toe = getPoint('foot_index');
+                // const heel = getPoint('heel');
+                // const toe = getPoint('foot_index');
+                // const ankle = getPoint('ankle');
+                // if (!heel || !toe || !ankle) return null;
+
+                // const imaginaryVertical = { x: heel.x, y: heel.y + 100 };
+                // const angle = this.calculateAngle(toe, heel, imaginaryVertical);
+
+                // return side === 'left' ? 360 - angle :  angle;
+                const knee = getPoint('knee');
                 const ankle = getPoint('ankle');
-                if (!ankle || !toe) return null;
-                const imaginaryPoint = { x: ankle.x, y: ankle.y - 100 };
-                return this.calculateAngle(toe, ankle, imaginaryPoint);
+                const hip = getPoint('hip');
+                if (!knee || !ankle) return null;
+                return this.calculateAngle(ankle, knee, hip);
             }
         };
 
@@ -98,7 +108,9 @@ class ClinicalAngleCalculator {
     }
 
     static validateAndCalculate(points, calculationFn) {
-        if (points.some(p => !p || p.score < 0.5)) return null;
+        if (points.some(p => !p || p.score < 0.5
+
+        )) return null;
         return calculationFn();
     }
 }
@@ -109,12 +121,10 @@ const preprocessImage = async (imageBuffer, targetSize = 256) => {
     const canvas = createCanvas(targetSize, targetSize);
     const ctx = canvas.getContext('2d');
 
-    // Calculate scaling while maintaining aspect ratio
     const scale = Math.min(targetSize / img.width, targetSize / img.height);
     const newWidth = Math.round(img.width * scale);
     const newHeight = Math.round(img.height * scale);
 
-    // Center the image with padding
     ctx.fillStyle = "black";
     ctx.fillRect(0, 0, targetSize, targetSize);
     const offsetX = (targetSize - newWidth) / 2;
@@ -127,30 +137,26 @@ const preprocessImage = async (imageBuffer, targetSize = 256) => {
 // Enhanced annotation drawing
 const drawAnnotations = (keypoints, canvas, metric, angle) => {
     const ctx = canvas.getContext('2d');
-    
-    // Draw keypoints
+
     keypoints.forEach((kp) => {
         if (kp.score > 0.5) {
             ctx.beginPath();
             ctx.fillStyle = 'red';
             ctx.arc(kp.x, kp.y, 3, 0, 2 * Math.PI);
             ctx.fill();
-            
-            // Draw keypoint names
+
             ctx.fillStyle = 'yellow';
             ctx.font = '12px Arial';
             ctx.fillText(kp.name, kp.x + 5, kp.y + 5);
         }
     });
 
-    // Draw angle measurement
     if (angle !== null) {
         ctx.fillStyle = 'white';
         ctx.font = 'bold 16px Arial';
         ctx.fillText(`${metric}: ${angle.toFixed(1)}°`, 10, 30);
     }
 
-    // Draw confidence scores
     ctx.fillStyle = 'green';
     ctx.font = '14px Arial';
     keypoints.forEach((kp, i) => {
@@ -160,51 +166,34 @@ const drawAnnotations = (keypoints, canvas, metric, angle) => {
     });
 };
 
-// Initialize BlazePose model
+// Load BlazePose model
 let model;
 (async () => {
-    try {
-        console.log('Starting to load TensorFlow...');
-        await tf.ready();
-        console.log('TensorFlow ready, loading BlazePose model...');
-        
-        model = await poseDetection.createDetector(
-            poseDetection.SupportedModels.BlazePose,
-            {
-                runtime: 'tfjs',
-                modelType: 'heavy',
-                enableSmoothing: true,
-            }
-        );
-        
-        console.log('BlazePose model loaded successfully');
-    } catch (error) {
-        console.error('Error loading BlazePose model:', error);
-    }
+    await tf.ready();
+    model = await poseDetection.createDetector(poseDetection.SupportedModels.BlazePose, {
+        runtime: 'tfjs',
+        modelType: 'heavy',
+        enableSmoothing: true,
+    });
+    console.log('BlazePose model loaded');
 })();
 
-// Main endpoint for analyzing metrics
+// Main analyze-metrics endpoint
 app.post('/analyze-metrics', (req, res) => {
-    console.log('Received analyze-metrics request');
-    
     upload(req, res, async (err) => {
         if (err) {
-            console.error('Upload error:', err);
             return res.status(500).json({ error: err.message });
         }
 
         if (!model) {
-            console.error('Model not loaded');
-            return res.status(503).json({
-                error: 'Model is still loading, please try again'
-            });
+            return res.status(503).json({ error: 'Model is still loading' });
         }
 
         const images = req.files;
-        console.log('Received files:', Object.keys(images || {}));
-        
+        const side = req.body.side || 'right';  // Default to right side if not provided
+
         const requiredMetrics = [
-            'ankle', 'knee', 'hipFlexion', 
+            'ankle', 'knee', 'hipFlexion',
             'hipRotation', 'popliteal', 'footProgression'
         ];
         const results = {};
@@ -212,13 +201,13 @@ app.post('/analyze-metrics', (req, res) => {
         try {
             for (const metric of requiredMetrics) {
                 if (!images || !images[metric] || !images[metric][0]) {
-                    console.log(`Skipping ${metric} - no image provided`);
+                    results[metric] = { error: 'No image provided' };
                     continue;
                 }
 
                 const file = images[metric][0];
                 const processedCanvas = await preprocessImage(file.buffer);
-                
+
                 const poses = await model.estimatePoses(processedCanvas, {
                     flipHorizontal: true,
                     maxPoses: 1,
@@ -226,12 +215,7 @@ app.post('/analyze-metrics', (req, res) => {
                 });
 
                 if (!poses.length) {
-                    console.log(`No poses detected for ${metric}`);
-                    results[metric] = { 
-                        error: 'No pose detected', 
-                        angle: null, 
-                        image: null 
-                    };
+                    results[metric] = { error: 'No pose detected', angle: null, image: null };
                     continue;
                 }
 
@@ -242,10 +226,7 @@ app.post('/analyze-metrics', (req, res) => {
                     score: kp.score,
                 }));
 
-                const angle = ClinicalAngleCalculator.calculateMetricAngles(
-                    metric, 
-                    keypoints
-                );
+                const angle = ClinicalAngleCalculator.calculateMetricAngles(metric, keypoints, side);
 
                 drawAnnotations(keypoints, processedCanvas, metric, angle);
 
@@ -255,21 +236,15 @@ app.post('/analyze-metrics', (req, res) => {
                     keypoints: keypoints.filter(kp => kp.score > 0.5),
                     image: `data:image/png;base64,${processedCanvas.toBuffer().toString('base64')}`
                 };
-
-                console.log(`Completed processing ${metric}`);
             }
 
-            console.log('Sending response...');
             res.json(results);
         } catch (error) {
-            console.error('Error processing images:', error);
-            res.status(500).json({
-                error: 'Error processing the images',
-                details: error.message
-            });
+            res.status(500).json({ error: 'Processing error', details: error.message });
         }
     });
 });
+
 
 // Start the server
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));

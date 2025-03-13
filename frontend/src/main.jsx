@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import PoseEstimationMetrics from './components/pose-estimation-metrics.jsx'
+import PoseEstimationMetrics from './components/3pose-estimation-metrics.jsx'
 
 
 import './index.css'
