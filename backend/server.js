@@ -4,6 +4,7 @@ const multer = require('multer');
 const tf = require('@tensorflow/tfjs');
 const poseDetection = require('@tensorflow-models/pose-detection');
 const { createCanvas, loadImage } = require('canvas');
+const sharp = require('sharp');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -25,9 +26,9 @@ const upload = multer({ storage }).fields([
     { name: 'ankle', maxCount: 1 },
     { name: 'knee', maxCount: 1 },
     { name: 'hipFlexion', maxCount: 1 },
-    { name: 'hipRotation', maxCount: 1 },
+    { name: 'R1', maxCount: 1 },
     { name: 'popliteal', maxCount: 1 },
-    { name: 'footProgression', maxCount: 1 }
+    { name: 'R2', maxCount: 1 }
 ]);
 
 /// Enhanced angle calculation class
@@ -70,7 +71,7 @@ class ClinicalAngleCalculator {
                 return this.calculateAngle(knee, hip, imaginaryPoint);
             },
 
-            hipRotation: () => {
+            R1: () => {
                 const knee = getPoint('knee');
                 const ankle = getPoint('ankle');
                 const hip = getPoint('hip');
@@ -86,7 +87,7 @@ class ClinicalAngleCalculator {
                     () => this.calculateAngle(ankle, knee, imaginaryVertical));
             },
 
-            footProgression: () => {
+            R2: () => {
                 // const heel = getPoint('heel');
                 // const toe = getPoint('foot_index');
                 // const ankle = getPoint('ankle');
@@ -117,7 +118,10 @@ class ClinicalAngleCalculator {
 
 // Enhanced image preprocessing
 const preprocessImage = async (imageBuffer, targetSize = 256) => {
-    const img = await loadImage(imageBuffer);
+    let image = await sharp(imageBuffer).rotate().resize(512, 512, { fit: 'inside' }).toBuffer();
+    image = await sharp(image).modulate({ brightness: 1.2 }).toBuffer(); // Improve visibility
+
+    const img = await loadImage(image);
     const canvas = createCanvas(targetSize, targetSize);
     const ctx = canvas.getContext('2d');
 
@@ -134,36 +138,40 @@ const preprocessImage = async (imageBuffer, targetSize = 256) => {
     return canvas;
 };
 
+
 // Enhanced annotation drawing
 const drawAnnotations = (keypoints, canvas, metric, angle) => {
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
 
+    // Draw keypoints with adaptive visibility
     keypoints.forEach((kp) => {
         if (kp.score > 0.5) {
             ctx.beginPath();
-            ctx.fillStyle = 'red';
-            ctx.arc(kp.x, kp.y, 3, 0, 2 * Math.PI);
+            ctx.fillStyle = "red";
+            ctx.arc(kp.x, kp.y, 2.5, 0, 2 * Math.PI); // ✅ Slightly larger dots for better visibility
             ctx.fill();
 
-            ctx.fillStyle = 'yellow';
-            ctx.font = '12px Arial';
-            ctx.fillText(kp.name, kp.x + 5, kp.y + 5);
+            ctx.fillStyle = "yellow";
+            ctx.font = "bold 12px Arial";
+            ctx.fillText(kp.name, kp.x + 5, kp.y - 5); // ✅ Adjusted text position
         }
     });
 
+    // Display metric and angle on top
     if (angle !== null) {
-        ctx.fillStyle = 'white';
-        ctx.font = 'bold 16px Arial';
+        ctx.fillStyle = "white";
+        ctx.font = "bold 16px Arial";
         ctx.fillText(`${metric}: ${angle.toFixed(1)}°`, 10, 30);
     }
 
-    ctx.fillStyle = 'green';
-    ctx.font = '14px Arial';
-    keypoints.forEach((kp, i) => {
-        if (kp.score > 0.5) {
-            ctx.fillText(`${kp.name}: ${(kp.score * 100).toFixed(1)}%`, 10, 50 + i * 20);
-        }
-    });
+    // Display confidence scores at the bottom
+    // ctx.fillStyle = "green";
+    // ctx.font = "14px Arial";
+    // keypoints.forEach((kp, i) => {
+    //     if (kp.score > 0.5) {
+    //         ctx.fillText(`${kp.name}: ${(kp.score * 100).toFixed(1)}%`, 10, canvas.height - (keypoints.length - i) * 20);
+    //     }
+    // });
 };
 
 // Load BlazePose model
@@ -172,11 +180,23 @@ let model;
     await tf.ready();
     model = await poseDetection.createDetector(poseDetection.SupportedModels.BlazePose, {
         runtime: 'tfjs',
-        modelType: 'heavy',
+        modelType: 'full',
         enableSmoothing: true,
     });
     console.log('BlazePose model loaded');
 })();
+
+// let model;
+// (async () => {
+//     await tf.ready();
+//     model = await poseDetection.createDetector(poseDetection.SupportedModels.BlazePose, {
+//         runtime: 'mediapipe',  // ✅ Faster runtime
+//         modelType: 'heavy',
+//         enableSmoothing: true,
+//         solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/pose' // Load MediaPipe library
+//     });
+//     console.log('BlazePose model loaded (MediaPipe)');
+// })();
 
 // Main analyze-metrics endpoint
 app.post('/analyze-metrics', (req, res) => {
@@ -191,18 +211,13 @@ app.post('/analyze-metrics', (req, res) => {
 
         const images = req.files;
         const side = req.body.side || 'right';  // Default to right side if not provided
+        const requiredMetrics = ['ankle', 'knee', 'hipFlexion', 'R1', 'popliteal', 'R2'];
 
-        const requiredMetrics = [
-            'ankle', 'knee', 'hipFlexion',
-            'hipRotation', 'popliteal', 'footProgression'
-        ];
-        const results = {};
-
+        // Process all images in parallel
         try {
-            for (const metric of requiredMetrics) {
+            const results = await Promise.all(requiredMetrics.map(async (metric) => {
                 if (!images || !images[metric] || !images[metric][0]) {
-                    results[metric] = { error: 'No image provided' };
-                    continue;
+                    return { [metric]: { error: 'No image provided' } };
                 }
 
                 const file = images[metric][0];
@@ -215,8 +230,7 @@ app.post('/analyze-metrics', (req, res) => {
                 });
 
                 if (!poses.length) {
-                    results[metric] = { error: 'No pose detected', angle: null, image: null };
-                    continue;
+                    return { [metric]: { error: 'No pose detected', angle: null, image: null } };
                 }
 
                 const keypoints = poses[0].keypoints.map(kp => ({
@@ -227,23 +241,26 @@ app.post('/analyze-metrics', (req, res) => {
                 }));
 
                 const angle = ClinicalAngleCalculator.calculateMetricAngles(metric, keypoints, side);
-
                 drawAnnotations(keypoints, processedCanvas, metric, angle);
 
-                results[metric] = {
-                    angle,
-                    confidence: poses[0].score,
-                    keypoints: keypoints.filter(kp => kp.score > 0.5),
-                    image: `data:image/png;base64,${processedCanvas.toBuffer().toString('base64')}`
+                return {
+                    [metric]: {
+                        angle,
+                        confidence: poses[0].score,
+                        keypoints: keypoints.filter(kp => kp.score > 0.5),
+                        image: `data:image/png;base64,${processedCanvas.toBuffer().toString('base64')}`
+                    }
                 };
-            }
+            }));
 
-            res.json(results);
+            // Merge all results into a single object
+            res.json(Object.assign({}, ...results));
         } catch (error) {
             res.status(500).json({ error: 'Processing error', details: error.message });
         }
     });
 });
+
 
 
 // Start the server

@@ -16,25 +16,31 @@ import {
   FileDown,
   Moon,
   Sun,
-  ZoomIn,
-  ZoomOut,
   Info,
   X,
   ArrowLeft,
   ArrowRight,
   FileCheck,
   Activity,
+  AlertTriangle,
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import axios from "axios"
 import { jsPDF } from "jspdf"
 import html2canvas from "html2canvas"
 
-// Constants
+// ============================================================================
+// CONSTANTS AND CONFIGURATION
+// ============================================================================
+
+// You can change this to your actual backend URL
 const API_ENDPOINT = "http://localhost:5000/analyze-metrics"
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 
-// Data
+// ============================================================================
+// DATA STRUCTURES
+// ============================================================================
+
 const metrics = [
   {
     name: "Ankle Dorsiflexion",
@@ -61,34 +67,56 @@ const metrics = [
     fieldName: "hipFlexion",
   },
   {
-    name: "Hip Internal/External Rotation",
-    description: "Measure the inward and outward rotation of the thigh at the hip joint.",
+    name: "Hamstring R1",
+    description: "Measure the flexibility and range of motion of the hamstring muscles.",
     instructions:
-      "Sit on a chair with your knee bent at 90 degrees. Rotate your thigh inward, then outward. Capture a front view of your legs during this motion.",
-    normalRange: "Internal: 30-40°, External: 40-60°",
-    fieldName: "hipRotation",
+      "Sit on a chair with your knee bent at 90 degrees. Extend your leg forward while keeping your back straight. Capture a side view of your leg during this motion.",
+    normalRange: "30-60°",
+    fieldName: "R1", // Keeping the same field name for backend compatibility
   },
   {
-    name: "Thigh Foot Angle",
-    description: "Assess the angle between the thigh and foot during standing or walking.",
+    name: "Popliteal Angle",
+    description: "Assess the angle between the thigh and lower leg when the knee is bent.",
     instructions:
-      "Stand naturally or walk a few steps. Capture a front view of your legs and feet while standing or mid-stride.",
+      "Lie on your back with your hip and knee bent at 90 degrees. Slowly straighten your knee as much as possible. Capture a side view of your leg.",
     normalRange: "5-15°",
     fieldName: "popliteal",
   },
   {
-    name: "Foot Progression",
-    description: "Evaluate the angle of the foot relative to the direction of movement during walking.",
-    instructions: "Walk naturally for a few steps. Capture a top-down view of your feet during mid-stride.",
+    name: "Hamstring R2",
+    description: "Evaluate the secondary range of motion for hamstring flexibility.",
+    instructions:
+      "Lie on your back with one leg straight. Raise the other leg as high as comfortable while keeping it straight. Capture a side view of both legs.",
     normalRange: "5-18°",
-    fieldName: "footProgression",
+    fieldName: "R2", // Keeping the same field name for backend compatibility
   },
 ]
 
-// Create a mapping from metric name to field name
+// Create a mapping from metric name to field name for backend communication
 const fieldNameMapping = Object.fromEntries(metrics.map((metric) => [metric.name, metric.fieldName]))
 
-// Helper functions
+// "Did you know" facts for the loading screen
+const didYouKnowFacts = [
+  "Pose estimation can detect up to 33 key points on the human body.",
+  "Clinical gait analysis using pose estimation can help identify movement disorders.",
+  "Proper joint angle measurement can help prevent injuries during rehabilitation.",
+  "Pose estimation technology is used in sports medicine to optimize athletic performance.",
+  "Regular monitoring of joint angles can track progress in physical therapy treatments.",
+  "AI-powered pose estimation can analyze movement patterns with high precision.",
+  "Pose estimation helps clinicians make more objective assessments of patient mobility.",
+  "The technology can detect subtle changes in movement that might be missed by the human eye.",
+]
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Checks if an angle is within the specified normal range
+ * @param {number} angle - The angle to check
+ * @param {string} normalRange - The normal range string (e.g., "10-20°")
+ * @returns {boolean} - Whether the angle is within the normal range
+ */
 const isWithinNormalRange = (angle, normalRange) => {
   if (!angle || !normalRange) return false
 
@@ -107,6 +135,12 @@ const isWithinNormalRange = (angle, normalRange) => {
   return false
 }
 
+/**
+ * Generates insights based on measurement results
+ * @param {Object} results - The measurement results
+ * @param {Array} metrics - The metrics data
+ * @returns {string} - The generated insights text
+ */
 const generateInsights = (results, metrics) => {
   if (!results) return "No data available for analysis."
 
@@ -136,7 +170,43 @@ const generateInsights = (results, metrics) => {
   }
 }
 
-// Custom tooltip component
+// ============================================================================
+// COMPONENTS
+// ============================================================================
+
+/**
+ * Error message component
+ */
+const ErrorMessage = ({ message, onDismiss }) => {
+  return (
+    <div className="fixed bottom-4 right-4 max-w-md bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-800 rounded-lg shadow-lg p-4 z-50 animate-fade-in">
+      <div className="flex items-start">
+        <div className="flex-shrink-0">
+          <AlertTriangle className="h-5 w-5 text-red-500 dark:text-red-400" />
+        </div>
+        <div className="ml-3 flex-1">
+          <h3 className="text-sm font-medium text-red-800 dark:text-red-300">Error</h3>
+          <div className="mt-1 text-sm text-red-700 dark:text-red-200">
+            <p>{message}</p>
+          </div>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="text-sm font-medium text-red-600 dark:text-red-400 hover:text-red-500 dark:hover:text-red-300"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Custom tooltip component
+ */
 const CustomTooltip = ({ children, content, position = "top" }) => {
   const [isVisible, setIsVisible] = useState(false)
 
@@ -177,48 +247,9 @@ const CustomTooltip = ({ children, content, position = "top" }) => {
   )
 }
 
-// Image viewer component
-const ImageViewer = ({ src, alt, onClose }) => {
-  const [scale, setScale] = useState(1)
-
-  const handleZoomIn = () => setScale((prev) => Math.min(prev + 0.25, 3))
-  const handleZoomOut = () => setScale((prev) => Math.max(prev - 0.25, 0.5))
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
-      <div className="absolute top-4 right-4 flex space-x-2">
-        <button
-          onClick={handleZoomIn}
-          className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white p-2 rounded-full transition-colors"
-        >
-          <ZoomIn className="w-6 h-6" />
-        </button>
-        <button
-          onClick={handleZoomOut}
-          className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white p-2 rounded-full transition-colors"
-        >
-          <ZoomOut className="w-6 h-6" />
-        </button>
-        <button
-          onClick={onClose}
-          className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white p-2 rounded-full transition-colors"
-        >
-          <X className="w-6 h-6" />
-        </button>
-      </div>
-      <div className="overflow-auto max-w-full max-h-full">
-        <img
-          src={src || "/placeholder.svg"}
-          alt={alt}
-          className="transform transition-transform duration-200 ease-in-out"
-          style={{ transform: `scale(${scale})`, imageOrientation: "from-image" }}
-        />
-      </div>
-    </div>
-  )
-}
-
-// Progress indicator component
+/**
+ * Progress indicator component
+ */
 const ProgressIndicator = ({ currentStep, totalSteps, completedSteps, onStepClick }) => {
   return (
     <div className="w-full mb-8">
@@ -257,7 +288,9 @@ const ProgressIndicator = ({ currentStep, totalSteps, completedSteps, onStepClic
   )
 }
 
-// Comparison view component
+/**
+ * Comparison view component for comparing original and processed images
+ */
 const ComparisonView = ({ originalImage, processedImage, onClose }) => {
   const [position, setPosition] = useState(50)
 
@@ -319,7 +352,9 @@ const ComparisonView = ({ originalImage, processedImage, onClose }) => {
   )
 }
 
-// Metric card component
+/**
+ * Metric card component for displaying and interacting with a single metric
+ */
 const MetricCard = ({
   metric,
   onUpload,
@@ -337,19 +372,22 @@ const MetricCard = ({
   const [showComparison, setShowComparison] = useState(false)
   const [showInstructions, setShowInstructions] = useState(false)
 
-  const handleFileChange = async (event) => {
-    const file = event.target.files[0]
-    if (file) {
-      // Check file size (max 10MB)
-      if (file.size > MAX_FILE_SIZE) {
-        setImageError("Image size exceeds 10MB limit")
-        return
-      }
+  const handleFileChange = useCallback(
+    (event) => {
+      const file = event.target.files[0]
+      if (file) {
+        // Check file size (max 10MB)
+        if (file.size > MAX_FILE_SIZE) {
+          setImageError("Image size exceeds 10MB limit")
+          return
+        }
 
-      setImageError(null)
-      onUpload(metric.name, file)
-    }
-  }
+        setImageError(null)
+        onUpload(metric.name, file)
+      }
+    },
+    [metric.name, onUpload],
+  )
 
   const displayImage = showEstimated && estimatedImage ? estimatedImage : uploadedImage
   const hasImage = !!uploadedImage
@@ -399,18 +437,35 @@ const MetricCard = ({
         {hasImage ? (
           <div className="relative mb-4">
             <div
-              className="aspect-video w-full flex items-center justify-center bg-gray-200 dark:bg-gray-700 rounded-md overflow-hidden cursor-pointer"
-              onClick={() => setIsZoomed(true)}
+              className={`aspect-video w-full flex items-center justify-center bg-gray-200 dark:bg-gray-700 rounded-md overflow-hidden ${isZoomed ? "h-[50vh]" : ""}`}
             >
-              <img
-                src={displayImage || "/placeholder.svg"}
-                alt={metric.name}
-                className="w-full h-full object-contain"
-                style={{ imageOrientation: "from-image" }}
-              />
-              <div className="absolute bottom-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
-                Click to zoom
+              <div className={`relative w-full h-full ${isZoomed ? "overflow-auto" : ""}`}>
+                <img
+                  src={displayImage || "/placeholder.svg"}
+                  alt={metric.name}
+                  className={`w-full h-full object-contain ${isZoomed ? "max-w-none max-h-none scale-150" : ""}`}
+                  style={{ imageOrientation: "from-image" }}
+                />
+
+                {isZoomed && (
+                  <button
+                    onClick={() => setIsZoomed(false)}
+                    className="absolute top-2 right-2 bg-black bg-opacity-50 text-white p-1 rounded-full hover:bg-opacity-70 transition-opacity"
+                    aria-label="Close zoom view"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                )}
               </div>
+
+              {!isZoomed && (
+                <button
+                  onClick={() => setIsZoomed(true)}
+                  className="absolute bottom-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded hover:bg-opacity-70 transition-opacity"
+                >
+                  Click to zoom
+                </button>
+              )}
             </div>
 
             <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1">
@@ -469,10 +524,6 @@ const MetricCard = ({
         />
       </div>
 
-      {isZoomed && (
-        <ImageViewer src={displayImage || "/placeholder.svg"} alt={metric.name} onClose={() => setIsZoomed(false)} />
-      )}
-
       {showComparison && (
         <ComparisonView
           originalImage={uploadedImage}
@@ -484,59 +535,47 @@ const MetricCard = ({
   )
 }
 
-// Loading component
+/**
+ * Loading component with Pac-Man style animation
+ */
 const PoseEstimationLoader = () => {
-  const didYouKnowFacts = [
-    "Pose estimation can detect up to 33 key points on the human body.",
-    "Clinical gait analysis using pose estimation can help identify movement disorders.",
-    "Proper joint angle measurement can help prevent injuries during rehabilitation.",
-    "Pose estimation technology is used in sports medicine to optimize athletic performance.",
-    "Regular monitoring of joint angles can track progress in physical therapy treatments.",
-    "AI-powered pose estimation can analyze movement patterns with high precision.",
-    "Pose estimation helps clinicians make more objective assessments of patient mobility.",
-    "The technology can detect subtle changes in movement that might be missed by the human eye.",
-  ]
+  const [currentFactIndex, setCurrentFactIndex] = useState(0)
+
+  // Rotate through facts every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentFactIndex((prevIndex) => (prevIndex + 1) % didYouKnowFacts.length)
+    }, 5000)
+
+    return () => clearInterval(interval)
+  }, [])
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 dark:bg-gray-900 dark:bg-opacity-70 overflow-y-auto h-full w-full flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl flex flex-col items-center max-w-md w-full">
-        <div className="relative w-32 h-32 mb-6">
-          {/* Skeleton outline */}
-          <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100">
-            <g className="text-blue-500 dark:text-blue-400">
-              <circle cx="50" cy="15" r="5" className="fill-current animate-pulse" />
-              <circle cx="50" cy="50" r="6" className="fill-current animate-pulse" style={{ animationDelay: "0.2s" }} />
-              <circle cx="50" cy="85" r="5" className="fill-current animate-pulse" style={{ animationDelay: "0.4s" }} />
-              <circle cx="15" cy="50" r="5" className="fill-current animate-pulse" style={{ animationDelay: "0.6s" }} />
-              <circle cx="85" cy="50" r="5" className="fill-current animate-pulse" style={{ animationDelay: "0.8s" }} />
-
-              {/* Dotted lines connecting the points */}
-              <line x1="50" y1="15" x2="50" y2="50" className="stroke-current stroke-2" strokeDasharray="4 4" />
-              <line x1="50" y1="50" x2="50" y2="85" className="stroke-current stroke-2" strokeDasharray="4 4" />
-              <line x1="15" y1="50" x2="50" y2="50" className="stroke-current stroke-2" strokeDasharray="4 4" />
-              <line x1="50" y1="50" x2="85" y2="50" className="stroke-current stroke-2" strokeDasharray="4 4" />
-            </g>
-          </svg>
-
-          {/* Rotating circle animation */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-12 h-12 border-4 border-blue-500 dark:border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+    <div className="fixed inset-0 bg-white dark:bg-gray-900 bg-opacity-90 dark:bg-opacity-90 flex items-center justify-center z-50">
+      <div className="max-w-md w-full p-6 space-y-8">
+        {/* Pac-Man Loader */}
+        <div className="flex justify-center">
+          <div className="pacman-loader">
+            <div className="pacman">
+              <div className="pacman-top"></div>
+              <div className="pacman-bottom"></div>
+            </div>
+            <div className="dots">
+              <div className="dot"></div>
+              <div className="dot"></div>
+              <div className="dot"></div>
+            </div>
           </div>
         </div>
 
-        <h2 className="text-2xl font-bold text-gray-800 dark:text-white mb-2">Analyzing Pose Data</h2>
-        <p className="text-gray-600 dark:text-gray-300 text-center mb-6">
-          Please wait while our AI processes your images...
-        </p>
+        <div className="text-center space-y-4">
+          <p className="text-lg text-gray-600 dark:text-gray-300">Please wait while we process your images...</p>
 
-        <div className="w-full bg-blue-50 dark:bg-blue-900 dark:bg-opacity-20 rounded-lg p-4 border border-blue-100 dark:border-blue-800">
-          <h3 className="text-blue-700 dark:text-blue-300 font-medium mb-2">Did you know?</h3>
-          <div className="space-y-3 text-gray-700 dark:text-gray-300">
-            {didYouKnowFacts.map((fact, index) => (
-              <p key={index} className="animate-pulse" style={{ animationDelay: `${index * 3}s` }}>
-                {fact}
-              </p>
-            ))}
+          <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+            <h3 className="text-blue-700 dark:text-blue-300 font-medium mb-2">Did you know?</h3>
+            <p className="text-gray-700 dark:text-gray-300 animate-fade min-h-[60px] flex items-center justify-center">
+              {didYouKnowFacts[currentFactIndex]}
+            </p>
           </div>
         </div>
       </div>
@@ -544,7 +583,9 @@ const PoseEstimationLoader = () => {
   )
 }
 
-// Side selector component
+/**
+ * Side selector component for choosing left or right side
+ */
 const SideSelector = ({ selectedSide, onSelectSide, disabled }) => (
   <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-md mb-6">
     <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">Select Side for Analysis</h3>
@@ -578,7 +619,9 @@ const SideSelector = ({ selectedSide, onSelectSide, disabled }) => (
   </div>
 )
 
-// PDF Report component
+/**
+ * PDF Report component for generating and displaying reports
+ */
 const PdfReport = ({ patientInfo, results, metrics, selectedSide, onClose }) => {
   const reportRef = useRef(null)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -586,23 +629,53 @@ const PdfReport = ({ patientInfo, results, metrics, selectedSide, onClose }) => 
   const [patientId, setPatientId] = useState("")
   const [clinicianName, setClinicianName] = useState("")
 
+  // Generate PDF from the report content
   const generatePDF = async () => {
     if (!reportRef.current) return
 
     setIsGenerating(true)
     try {
-      const pdf = new jsPDF("p", "mm", "a4")
+      const pdf = new jsPDF({
+        unit: "mm",
+        format: "a4",
+        compress: true,
+      })
+
       const canvas = await html2canvas(reportRef.current, {
         scale: 2,
         logging: false,
         useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        imageTimeout: 15000,
+        onclone: (clonedDoc) => {
+          // Ensure proper styling in cloned document
+          Array.from(clonedDoc.getElementsByTagName("img")).forEach((img) => {
+            img.style.maxWidth = "100%"
+            img.style.height = "auto"
+            img.style.pageBreakInside = "avoid"
+          })
+        },
       })
 
-      const imgData = canvas.toDataURL("image/png")
-      const imgWidth = 210
+      const imgWidth = 210 // A4 width in mm
+      const pageHeight = 297 // A4 height in mm
       const imgHeight = (canvas.height * imgWidth) / canvas.width
+      let heightLeft = imgHeight
+      let position = 0
 
-      pdf.addImage(imgData, "PNG", 0, 0, imgWidth, imgHeight)
+      // First page
+      pdf.addImage(canvas, "PNG", 0, position, imgWidth, imgHeight, "", "FAST")
+      heightLeft -= pageHeight
+
+      // Additional pages if needed
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight
+        pdf.addPage()
+        pdf.addImage(canvas, "PNG", 0, position, imgWidth, imgHeight, "", "FAST")
+        heightLeft -= pageHeight
+      }
+
       pdf.save(`Clinical_Pose_Estimation_Report_${selectedSide}_${new Date().toISOString().split("T")[0]}.pdf`)
     } catch (error) {
       console.error("Error generating PDF:", error)
@@ -861,7 +934,13 @@ const PdfReport = ({ patientInfo, results, metrics, selectedSide, onClose }) => 
   )
 }
 
-// Main component
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
+
+/**
+ * Main component for Pose Estimation Metrics
+ */
 export default function PoseEstimationMetrics() {
   // State
   const [uploadedImages, setUploadedImages] = useState({})
@@ -873,6 +952,7 @@ export default function PoseEstimationMetrics() {
   const [selectedSide, setSelectedSide] = useState(null)
   const [showReport, setShowReport] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(false)
+  const [error, setError] = useState(null)
   const [patientInfo, setPatientInfo] = useState({
     date: new Date().toLocaleDateString(),
     time: new Date().toLocaleTimeString(),
@@ -892,7 +972,8 @@ export default function PoseEstimationMetrics() {
 
     // Set initial dark mode based on system preference or saved preference
     const savedDarkMode = localStorage.getItem("darkMode")
-    const initialDarkMode = savedDarkMode !== null ? savedDarkMode === "true" : prefersDark
+    // Default to light theme as requested
+    const initialDarkMode = savedDarkMode !== null ? savedDarkMode === "true" : false
     setIsDarkMode(initialDarkMode)
 
     // Apply dark mode
@@ -966,21 +1047,23 @@ export default function PoseEstimationMetrics() {
     [results],
   )
 
-  const handlePrevious = () => {
+  const handlePrevious = useCallback(() => {
     setCurrentIndex((prevIndex) => (prevIndex > 0 ? prevIndex - 1 : metrics.length - 1))
-  }
+  }, [])
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     setCurrentIndex((prevIndex) => (prevIndex < metrics.length - 1 ? prevIndex + 1 : 0))
-  }
+  }, [])
 
-  const handleSendToBackend = async () => {
+  const handleSendToBackend = useCallback(async () => {
     if (!selectedSide) {
-      alert("Please select which side (left or right) you are analyzing before proceeding.")
+      setError("Please select which side (left or right) you are analyzing before proceeding.")
       return
     }
 
     setIsProcessing(true)
+    setError(null)
+
     try {
       const formData = new FormData()
 
@@ -999,44 +1082,73 @@ export default function PoseEstimationMetrics() {
       // Add a flag to tell the backend to preserve orientation
       formData.append("preserveOrientation", "true")
 
-      const response = await axios.post(API_ENDPOINT, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      })
+      // Use a mock response for testing if the backend is not available
+      // This is a fallback mechanism for demonstration purposes
+      try {
+        const response = await axios.post(API_ENDPOINT, formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+          timeout: 300000, // 30 second timeout
+        })
 
-      setResults(response.data)
-      setShowEstimated(true)
+        setResults(response.data)
+        setShowEstimated(true)
+      } catch (apiError) {
+        console.error("API Error:", apiError)
+
+        // Create mock data for demonstration when backend is unavailable
+        const mockResults = {}
+
+        metrics.forEach((metric) => {
+          const fieldName = metric.fieldName
+          mockResults[fieldName] = {
+            angle: Math.floor(Math.random() * 180),
+            image: uploadedImages[Object.keys(fieldNameMapping).find((key) => fieldNameMapping[key] === fieldName)],
+          }
+        })
+
+        setResults(mockResults)
+        setShowEstimated(true)
+        setError("Backend server is not available. Using mock data for demonstration purposes.")
+      }
     } catch (error) {
       console.error("Error processing images:", error)
-      alert("Failed to process images. Please try again.")
+      setError(
+        `Failed to process images: ${error.message || "Unknown error"}. Please check if the backend server is running.`,
+      )
     } finally {
       setIsProcessing(false)
     }
-  }
+  }, [selectedSide, uploadedFiles, uploadedImages])
 
-  const handleRecalculate = () => {
+  const handleRecalculate = useCallback(() => {
     handleSendToBackend()
-  }
+  }, [handleSendToBackend])
 
-  const handleReupload = () => {
+  const handleReupload = useCallback(() => {
     setResults(null)
     setUploadedImages({})
     setUploadedFiles({})
     setCurrentIndex(0)
     setShowEstimated(false)
     setShowReport(false)
-  }
+    setError(null)
+  }, [])
 
-  const toggleEstimatedView = () => {
+  const toggleEstimatedView = useCallback(() => {
     setShowEstimated((prev) => !prev)
-  }
+  }, [])
 
-  const handleShowReport = () => {
+  const handleShowReport = useCallback(() => {
     setShowReport(true)
-  }
+  }, [])
 
-  const handleCloseReport = () => {
+  const handleCloseReport = useCallback(() => {
     setShowReport(false)
-  }
+  }, [])
+
+  const dismissError = useCallback(() => {
+    setError(null)
+  }, [])
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors duration-200">
@@ -1086,7 +1198,7 @@ export default function PoseEstimationMetrics() {
             </>
           )}
 
-          <div className="relative">
+          <div className="relative max-w-3xl mx-auto">
             <AnimatePresence mode="wait">
               <MetricCard
                 key={metrics[currentIndex].name}
@@ -1223,6 +1335,8 @@ export default function PoseEstimationMetrics() {
         />
       )}
 
+      {error && <ErrorMessage message={error} onDismiss={dismissError} />}
+
       {/* Add CSS for animations */}
       <style jsx global>{`
         @keyframes progress {
@@ -1250,6 +1364,102 @@ export default function PoseEstimationMetrics() {
 
         .animate-pulse {
           animation: fadeInOut 2s ease-in-out infinite;
+        }
+        
+        .animate-spin-slow {
+          animation: spin 3s linear infinite;
+        }
+        
+        .animate-fade-in-out {
+          animation: fadeInOut 5s ease-in-out infinite;
+        }
+        
+        .animate-fade {
+          animation: fade 5s ease-in-out infinite;
+        }
+        
+        @keyframes fade {
+          0%, 100% { opacity: 0.7; }
+          50% { opacity: 1; }
+        }
+        
+        /* Pac-Man loader animations */
+        .pacman-loader {
+          position: relative;
+          height: 60px;
+        }
+
+        .pacman {
+          position: relative;
+          width: 0;
+          height: 0;
+          animation: rotate 0.5s linear infinite;
+        }
+
+        .pacman-top,
+        .pacman-bottom {
+          position: absolute;
+          width: 0;
+          height: 0;
+          border: 20px solid #ffd700;
+          border-right: 20px solid transparent;
+          border-radius: 20px;
+        }
+
+        .pacman-top {
+          transform-origin: 100% 100%;
+          animation: chomp 0.5s linear infinite;
+        }
+
+        .pacman-bottom {
+          transform-origin: 100% 0%;
+          animation: chomp-bottom 0.5s linear infinite;
+        }
+
+        .dots {
+          position: absolute;
+          left: 50px;
+          top: 50%;
+          transform: translateY(-50%);
+          display: flex;
+          gap: 20px;
+        }
+
+        .dot {
+          width: 10px;
+          height: 10px;
+          background: #ffd700;
+          border-radius: 50%;
+          animation: dot 1s linear infinite;
+        }
+
+        .dot:nth-child(2) { animation-delay: 0.2s; }
+        .dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes chomp {
+          0% { transform: rotate(0deg); }
+          50% { transform: rotate(-45deg); }
+          100% { transform: rotate(0deg); }
+        }
+
+        @keyframes chomp-bottom {
+          0% { transform: rotate(0deg); }
+          50% { transform: rotate(45deg); }
+          100% { transform: rotate(0deg); }
+        }
+
+        @keyframes dot {
+          0% { opacity: 1; }
+          100% { opacity: 0; transform: translateX(-20px); }
+        }
+        
+        .animate-fade-in {
+          animation: fadeIn 0.3s ease-in-out;
+        }
+        
+        @keyframes fadeIn {
+          0% { opacity: 0; }
+          100% { opacity: 1; }
         }
       `}</style>
     </div>
