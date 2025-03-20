@@ -31,6 +31,38 @@ const upload = multer({ storage }).fields([
     { name: 'R2', maxCount: 1 }
 ]);
 
+// Define keypoints required for each metric
+const metricKeypointsMap = {
+    ankle: ['right_knee', 'right_ankle', 'right_foot_index'],
+    knee: ['right_hip', 'right_knee', 'right_ankle'],
+    hipFlexion: ['right_knee', 'right_hip'],
+    R1: ['right_knee', 'right_ankle', 'right_hip'],
+    popliteal: ['right_knee', 'right_ankle'],
+    R2: ['right_knee', 'right_ankle', 'right_hip']
+};
+
+// Enhanced image preprocessing
+const preprocessImage = async (imageBuffer, targetSize = 256) => {
+    let image = await sharp(imageBuffer).rotate().resize(512, 512, { fit: 'inside' }).toBuffer();
+    image = await sharp(image).modulate({ brightness: 1.2 }).toBuffer(); // Improve visibility
+
+    const img = await loadImage(image);
+    const canvas = createCanvas(targetSize, targetSize);
+    const ctx = canvas.getContext('2d');
+
+    const scale = Math.min(targetSize / img.width, targetSize / img.height);
+    const newWidth = Math.round(img.width * scale);
+    const newHeight = Math.round(img.height * scale);
+
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, targetSize, targetSize);
+    const offsetX = (targetSize - newWidth) / 2;
+    const offsetY = (targetSize - newHeight) / 2;
+    ctx.drawImage(img, offsetX, offsetY, newWidth, newHeight);
+
+    return canvas;
+};
+
 /// Enhanced angle calculation class
 class ClinicalAngleCalculator {
     static calculateAngle(p1, p2, p3) {
@@ -88,15 +120,6 @@ class ClinicalAngleCalculator {
             },
 
             R2: () => {
-                // const heel = getPoint('heel');
-                // const toe = getPoint('foot_index');
-                // const ankle = getPoint('ankle');
-                // if (!heel || !toe || !ankle) return null;
-
-                // const imaginaryVertical = { x: heel.x, y: heel.y + 100 };
-                // const angle = this.calculateAngle(toe, heel, imaginaryVertical);
-
-                // return side === 'left' ? 360 - angle :  angle;
                 const knee = getPoint('knee');
                 const ankle = getPoint('ankle');
                 const hip = getPoint('hip');
@@ -116,63 +139,77 @@ class ClinicalAngleCalculator {
     }
 }
 
-// Enhanced image preprocessing
-const preprocessImage = async (imageBuffer, targetSize = 256) => {
-    let image = await sharp(imageBuffer).rotate().resize(512, 512, { fit: 'inside' }).toBuffer();
-    image = await sharp(image).modulate({ brightness: 1.2 }).toBuffer(); // Improve visibility
-
-    const img = await loadImage(image);
-    const canvas = createCanvas(targetSize, targetSize);
-    const ctx = canvas.getContext('2d');
-
-    const scale = Math.min(targetSize / img.width, targetSize / img.height);
-    const newWidth = Math.round(img.width * scale);
-    const newHeight = Math.round(img.height * scale);
-
-    ctx.fillStyle = "black";
-    ctx.fillRect(0, 0, targetSize, targetSize);
-    const offsetX = (targetSize - newWidth) / 2;
-    const offsetY = (targetSize - newHeight) / 2;
-    ctx.drawImage(img, offsetX, offsetY, newWidth, newHeight);
-
-    return canvas;
-};
-
 
 // Enhanced annotation drawing
-const drawAnnotations = (keypoints, canvas, metric, angle) => {
+const drawAnnotations = (keypoints, canvas, metric, angle, side) => {
     const ctx = canvas.getContext("2d");
 
-    // Draw keypoints with adaptive visibility
+    // Draw keypoints
     keypoints.forEach((kp) => {
         if (kp.score > 0.5) {
             ctx.beginPath();
             ctx.fillStyle = "red";
-            ctx.arc(kp.x, kp.y, 2.5, 0, 2 * Math.PI); // ✅ Slightly larger dots for better visibility
+            ctx.arc(kp.x, kp.y, 3, 0, 2 * Math.PI); // Larger dots for better visibility
             ctx.fill();
 
-            ctx.fillStyle = "yellow";
+            ctx.fillStyle = "grey";
             ctx.font = "bold 12px Arial";
-            ctx.fillText(kp.name, kp.x + 5, kp.y - 5); // ✅ Adjusted text position
+            ctx.fillText(kp.name, kp.x + 5, kp.y - 5); // Adjust text position
         }
     });
 
-    // Display metric and angle on top
-    if (angle !== null) {
-        ctx.fillStyle = "white";
-        ctx.font = "bold 16px Arial";
-        ctx.fillText(`${metric}: ${angle.toFixed(1)}°`, 10, 30);
+    // Identify keypoints needed for the metric
+    const hip = keypoints.find(kp => kp.name.includes("hip"));
+    const knee = keypoints.find(kp => kp.name.includes("knee"));
+    const ankle = keypoints.find(kp => kp.name.includes("ankle"));
+
+    // Draw lines between metric keypoints
+    if (hip && knee) drawLine(ctx, hip, knee, "cyan");  // Hip to knee
+    if (knee && ankle) drawLine(ctx, knee, ankle, "lime");  // Knee to ankle
+
+    // Draw imaginary points for metric calculations
+    if (metric === "hipFlexion" && hip) {
+        const imaginaryHipPoint = { 
+            x: hip.x - (side === "right" ? 100 : -100), 
+            y: hip.y 
+        };
+        drawLine(ctx, hip, imaginaryHipPoint, "orange", [5, 5]); // Dotted line
+        drawPoint(ctx, imaginaryHipPoint, "orange", "Imaginary");
     }
 
-    // Display confidence scores at the bottom
-    // ctx.fillStyle = "green";
-    // ctx.font = "14px Arial";
-    // keypoints.forEach((kp, i) => {
-    //     if (kp.score > 0.5) {
-    //         ctx.fillText(`${kp.name}: ${(kp.score * 100).toFixed(1)}%`, 10, canvas.height - (keypoints.length - i) * 20);
-    //     }
-    // });
+    if (metric === "popliteal" && knee) {
+        const imaginaryKneePoint = { x: knee.x, y: knee.y - 100 };
+        drawLine(ctx, knee, imaginaryKneePoint, "purple", [5, 5]); // Dotted line
+        drawPoint(ctx, imaginaryKneePoint, "purple", "Imaginary");
+    }
+
+   
 };
+
+// Helper function to draw a line between two points
+const drawLine = (ctx, p1, p2, color, dash = []) => {
+    ctx.beginPath();
+    ctx.setLineDash(dash); // Dotted line if needed
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.moveTo(p1.x, p1.y);
+    ctx.lineTo(p2.x, p2.y);
+    ctx.stroke();
+    ctx.setLineDash([]); // Reset line style
+};
+
+// Helper function to draw imaginary points
+const drawPoint = (ctx, point, color, label) => {
+    ctx.beginPath();
+    ctx.fillStyle = color;
+    ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.fillStyle = "grey";
+    ctx.font = "bold 12px Arial";
+    ctx.fillText(label, point.x + 5, point.y - 5);
+};
+
+
 
 // Load BlazePose model
 let model;
@@ -180,23 +217,12 @@ let model;
     await tf.ready();
     model = await poseDetection.createDetector(poseDetection.SupportedModels.BlazePose, {
         runtime: 'tfjs',
-        modelType: 'full',
+        modelType: 'heavy',
         enableSmoothing: true,
     });
     console.log('BlazePose model loaded');
 })();
 
-// let model;
-// (async () => {
-//     await tf.ready();
-//     model = await poseDetection.createDetector(poseDetection.SupportedModels.BlazePose, {
-//         runtime: 'mediapipe',  // ✅ Faster runtime
-//         modelType: 'heavy',
-//         enableSmoothing: true,
-//         solutionPath: 'https://cdn.jsdelivr.net/npm/@mediapipe/pose' // Load MediaPipe library
-//     });
-//     console.log('BlazePose model loaded (MediaPipe)');
-// })();
 
 // Main analyze-metrics endpoint
 app.post('/analyze-metrics', (req, res) => {
@@ -210,10 +236,9 @@ app.post('/analyze-metrics', (req, res) => {
         }
 
         const images = req.files;
-        const side = req.body.side || 'right';  // Default to right side if not provided
+        const side = req.body.side || 'right';  // Default to right side
         const requiredMetrics = ['ankle', 'knee', 'hipFlexion', 'R1', 'popliteal', 'R2'];
 
-        // Process all images in parallel
         try {
             const results = await Promise.all(requiredMetrics.map(async (metric) => {
                 if (!images || !images[metric] || !images[metric][0]) {
@@ -240,8 +265,20 @@ app.post('/analyze-metrics', (req, res) => {
                     score: kp.score,
                 }));
 
-                const angle = ClinicalAngleCalculator.calculateMetricAngles(metric, keypoints, side);
-                drawAnnotations(keypoints, processedCanvas, metric, angle);
+                // Filter keypoints based on metric
+                const filteredKeypoints = poses[0].keypoints.filter(kp =>
+                    metricKeypointsMap[metric].includes(kp.name) && kp.score > 0.5
+                );
+
+                if (filteredKeypoints.length < metricKeypointsMap[metric].length) {
+                    return { [metric]: { error: 'Insufficient keypoints detected', angle: null, image: null } };
+                }
+
+                // Calculate angle with filtered keypoints
+                const angle = ClinicalAngleCalculator.calculateMetricAngles(metric, filteredKeypoints, side);
+
+                // Draw detected + imaginary keypoints
+                drawAnnotations(filteredKeypoints, processedCanvas, metric, angle, side);
 
                 return {
                     [metric]: {
@@ -253,13 +290,13 @@ app.post('/analyze-metrics', (req, res) => {
                 };
             }));
 
-            // Merge all results into a single object
             res.json(Object.assign({}, ...results));
         } catch (error) {
             res.status(500).json({ error: 'Processing error', details: error.message });
         }
     });
 });
+
 
 
 

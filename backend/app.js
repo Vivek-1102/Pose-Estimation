@@ -88,15 +88,6 @@ class ClinicalAngleCalculator {
             },
 
             R2: () => {
-                // const heel = getPoint('heel');
-                // const toe = getPoint('foot_index');
-                // const ankle = getPoint('ankle');
-                // if (!heel || !toe || !ankle) return null;
-
-                // const imaginaryVertical = { x: heel.x, y: heel.y + 100 };
-                // const angle = this.calculateAngle(toe, heel, imaginaryVertical);
-
-                // return side === 'left' ? 360 - angle :  angle;
                 const knee = getPoint('knee');
                 const ankle = getPoint('ankle');
                 const hip = getPoint('hip');
