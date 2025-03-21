@@ -31,14 +31,20 @@ const upload = multer({ storage }).fields([
     { name: 'R2', maxCount: 1 }
 ]);
 
-// Define keypoints required for each metric
-const metricKeypointsMap = {
-    ankle: ['right_knee', 'right_ankle', 'right_foot_index'],
-    knee: ['right_hip', 'right_knee', 'right_ankle'],
-    hipFlexion: ['right_knee', 'right_hip'],
-    R1: ['right_knee', 'right_ankle', 'right_hip'],
-    popliteal: ['right_knee', 'right_ankle'],
-    R2: ['right_knee', 'right_ankle', 'right_hip']
+// Function to dynamically get keypoints based on side
+const getMetricKeypoints = (metric, side) => {
+    const prefix = side === 'right' ? 'right' : 'left';
+
+    const keypointsMap = {
+        ankle: [`${prefix}_knee`, `${prefix}_ankle`, `${prefix}_foot_index`],
+        knee: [`${prefix}_hip`, `${prefix}_knee`, `${prefix}_ankle`],
+        hipFlexion: [`${prefix}_knee`, `${prefix}_hip`],
+        R1: [`${prefix}_knee`, `${prefix}_ankle`, `${prefix}_hip`],
+        popliteal: [`${prefix}_knee`, `${prefix}_ankle`],
+        R2: [`${prefix}_knee`, `${prefix}_ankle`, `${prefix}_hip`],
+    };
+
+    return keypointsMap[metric] || [];
 };
 
 // Enhanced image preprocessing
@@ -225,6 +231,7 @@ let model;
 
 
 // Main analyze-metrics endpoint
+// Updated analyze-metrics endpoint
 app.post('/analyze-metrics', (req, res) => {
     upload(req, res, async (err) => {
         if (err) {
@@ -249,7 +256,7 @@ app.post('/analyze-metrics', (req, res) => {
                 const processedCanvas = await preprocessImage(file.buffer);
 
                 const poses = await model.estimatePoses(processedCanvas, {
-                    flipHorizontal: true,
+                    flipHorizontal: side === 'left',  // Flip only if left side
                     maxPoses: 1,
                     scoreThreshold: 0.5
                 });
@@ -265,19 +272,20 @@ app.post('/analyze-metrics', (req, res) => {
                     score: kp.score,
                 }));
 
-                // Filter keypoints based on metric
-                const filteredKeypoints = poses[0].keypoints.filter(kp =>
-                    metricKeypointsMap[metric].includes(kp.name) && kp.score > 0.5
+                // Dynamically get keypoints for the given metric & side
+                const metricKeypoints = getMetricKeypoints(metric, side);
+                const filteredKeypoints = keypoints.filter(kp =>
+                    metricKeypoints.includes(kp.name) && kp.score > 0.5
                 );
 
-                if (filteredKeypoints.length < metricKeypointsMap[metric].length) {
+                if (filteredKeypoints.length < metricKeypoints.length) {
                     return { [metric]: { error: 'Insufficient keypoints detected', angle: null, image: null } };
                 }
 
-                // Calculate angle with filtered keypoints
+                // Calculate angle using the filtered keypoints
                 const angle = ClinicalAngleCalculator.calculateMetricAngles(metric, filteredKeypoints, side);
 
-                // Draw detected + imaginary keypoints
+                // Draw keypoints, lines, and imaginary points
                 drawAnnotations(filteredKeypoints, processedCanvas, metric, angle, side);
 
                 return {
