@@ -14,8 +14,6 @@ import {
   EyeOff,
   Download,
   FileDown,
-  Moon,
-  Sun,
   Info,
   X,
   ArrowLeft,
@@ -23,6 +21,12 @@ import {
   FileCheck,
   Activity,
   AlertTriangle,
+  FileText,
+  Home,
+  Menu,
+  Settings,
+  User,
+  BarChart,
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import axios from "axios"
@@ -36,6 +40,7 @@ import html2canvas from "html2canvas"
 // You can change this to your actual backend URL
 const API_ENDPOINT = "http://localhost:5000/analyze-metrics"
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+const APP_VERSION = "1.0.0"
 
 // ============================================================================
 // DATA STRUCTURES
@@ -72,7 +77,7 @@ const metrics = [
     instructions:
       "Sit on a chair with your knee bent at 90 degrees. Extend your leg forward while keeping your back straight. Capture a side view of your leg during this motion.",
     normalRange: "30-60°",
-    fieldName: "R1", // Keeping the same field name for backend compatibility
+    fieldName: "hipRotation", // Keeping the same field name for backend compatibility
   },
   {
     name: "Popliteal Angle",
@@ -88,7 +93,7 @@ const metrics = [
     instructions:
       "Lie on your back with one leg straight. Raise the other leg as high as comfortable while keeping it straight. Capture a side view of both legs.",
     normalRange: "5-18°",
-    fieldName: "R2", // Keeping the same field name for backend compatibility
+    fieldName: "footProgression", // Keeping the same field name for backend compatibility
   },
 ]
 
@@ -170,6 +175,110 @@ const generateInsights = (results, metrics) => {
   }
 }
 
+/**
+ * Generates a CSV file from the results data
+ * @param {Object} results - The measurement results
+ * @param {Array} metrics - The metrics data
+ * @param {string} selectedSide - The selected side (left or right)
+ * @param {Object} patientInfo - The patient information
+ * @param {Object} selectedColumns - The columns to include in the CSV
+ * @returns {string} - The CSV content
+ */
+const generateCSV = (results, metrics, selectedSide, patientInfo, selectedColumns) => {
+  if (!results) return ""
+
+  // Define the column order
+  const columnOrder = [
+    "Patient Name",
+    "Patient ID",
+    "Metric Name",
+    "Angle",
+    "Normal Range",
+    "Status",
+    "Side",
+    "Diagnosis",
+    "Date",
+    "Time",
+    "Clinician Name",
+  ]
+
+  // Filter columns based on selection
+  const headers = columnOrder.filter((column) => selectedColumns[column])
+
+  // Create CSV rows
+  const rows = metrics.map((metric) => {
+    const fieldName = metric.fieldName
+    const result = results[fieldName]
+    const angle = result && result.angle !== null ? result.angle.toFixed(1) : "N/A"
+    const status =
+      result && result.angle !== null
+        ? isWithinNormalRange(result.angle, metric.normalRange)
+          ? "Normal"
+          : "Abnormal"
+        : "N/A"
+
+    // Create a row object with all possible values
+    const rowData = {
+      "Patient Name": patientInfo.patientName || "Not specified",
+      "Patient ID": patientInfo.patientId || "Not specified",
+      "Metric Name": metric.name,
+      Angle: angle,
+      "Normal Range": metric.normalRange,
+      Status: status,
+      Side: selectedSide,
+      Diagnosis: patientInfo.diagnosisType || "Not specified",
+      Date: patientInfo.date,
+      Time: patientInfo.time,
+      "Clinician Name": patientInfo.clinicianName || "Not specified",
+    }
+
+    // Filter the row data based on selected columns
+    return headers.map((header) => rowData[header])
+  })
+
+  // Combine header and rows
+  const csvContent = [headers.join(","), ...rows.map((row) => row.join(","))].join("\n")
+
+  return csvContent
+}
+
+/**
+ * Triggers download of a CSV file
+ * @param {string} csvContent - The CSV content
+ * @param {string} fileName - The file name
+ */
+const downloadCSV = (csvContent, fileName) => {
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.setAttribute("href", url)
+  link.setAttribute("download", fileName)
+  link.style.visibility = "hidden"
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+}
+
+/**
+ * Generates a unique ID
+ * @returns {string} - A unique ID
+ */
+const generateUniqueId = () => {
+  return `P${Math.floor(100000 + Math.random() * 900000)}`
+}
+
+/**
+ * Detects if the app is running in standalone mode (PWA)
+ * @returns {boolean} - Whether the app is running in standalone mode
+ */
+const isRunningAsStandalone = () => {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone ||
+    document.referrer.includes("android-app://")
+  )
+}
+
 // ============================================================================
 // COMPONENTS
 // ============================================================================
@@ -179,28 +288,66 @@ const generateInsights = (results, metrics) => {
  */
 const ErrorMessage = ({ message, onDismiss }) => {
   return (
-    <div className="fixed bottom-4 right-4 max-w-md bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-800 rounded-lg shadow-lg p-4 z-50 animate-fade-in">
+    <motion.div
+      className="fixed bottom-4 right-4 max-w-md bg-red-50 border border-red-200 rounded-lg shadow-lg p-4 z-50"
+      initial={{ opacity: 0, y: 50 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 50 }}
+      transition={{ duration: 0.3 }}
+    >
       <div className="flex items-start">
         <div className="flex-shrink-0">
-          <AlertTriangle className="h-5 w-5 text-red-500 dark:text-red-400" />
+          <AlertTriangle className="h-5 w-5 text-red-500" />
         </div>
         <div className="ml-3 flex-1">
-          <h3 className="text-sm font-medium text-red-800 dark:text-red-300">Error</h3>
-          <div className="mt-1 text-sm text-red-700 dark:text-red-200">
+          <h3 className="text-sm font-medium text-red-800">Error</h3>
+          <div className="mt-1 text-sm text-red-700">
+            <p>{message}</p>
+          </div>
+          <div className="mt-3">
+            <button type="button" onClick={onDismiss} className="text-sm font-medium text-red-600 hover:text-red-500">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+/**
+ * Success message component
+ */
+const SuccessMessage = ({ message, onDismiss }) => {
+  return (
+    <motion.div
+      className="fixed bottom-4 right-4 max-w-md bg-green-50 border border-green-200 rounded-lg shadow-lg p-4 z-50"
+      initial={{ opacity: 0, y: 50 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 50 }}
+      transition={{ duration: 0.3 }}
+    >
+      <div className="flex items-start">
+        <div className="flex-shrink-0">
+          <Check className="h-5 w-5 text-green-500" />
+        </div>
+        <div className="ml-3 flex-1">
+          <h3 className="text-sm font-medium text-green-800">Success</h3>
+          <div className="mt-1 text-sm text-green-700">
             <p>{message}</p>
           </div>
           <div className="mt-3">
             <button
               type="button"
               onClick={onDismiss}
-              className="text-sm font-medium text-red-600 dark:text-red-400 hover:text-red-500 dark:hover:text-red-300"
+              className="text-sm font-medium text-green-600 hover:text-green-500"
             >
               Dismiss
             </button>
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -225,24 +372,30 @@ const CustomTooltip = ({ children, content, position = "top" }) => {
       onClick={() => setIsVisible(!isVisible)}
     >
       {children}
-      {isVisible && (
-        <div
-          className={`absolute z-50 ${positions[position]} bg-gray-800 dark:bg-gray-700 text-white text-sm rounded-md px-3 py-2 w-max max-w-xs shadow-lg`}
-        >
-          {content}
-          <div
-            className={`absolute ${
-              position === "top"
-                ? "top-full left-1/2 transform -translate-x-1/2 border-t-gray-800 dark:border-t-gray-700"
-                : position === "bottom"
-                  ? "bottom-full left-1/2 transform -translate-x-1/2 border-b-gray-800 dark:border-b-gray-700"
-                  : position === "left"
-                    ? "left-full top-1/2 transform -translate-y-1/2 border-l-gray-800 dark:border-l-gray-700"
-                    : "right-full top-1/2 transform -translate-y-1/2 border-r-gray-800 dark:border-r-gray-700"
-            } border-solid border-8 border-transparent`}
-          ></div>
-        </div>
-      )}
+      <AnimatePresence>
+        {isVisible && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ duration: 0.15 }}
+            className={`absolute z-50 ${positions[position]} bg-gray-800 text-white text-sm rounded-md px-3 py-2 w-max max-w-xs shadow-lg`}
+          >
+            {content}
+            <div
+              className={`absolute ${
+                position === "top"
+                  ? "top-full left-1/2 transform -translate-x-1/2 border-t-gray-800"
+                  : position === "bottom"
+                    ? "bottom-full left-1/2 transform -translate-x-1/2 border-b-gray-800"
+                    : position === "left"
+                      ? "left-full top-1/2 transform -translate-y-1/2 border-l-gray-800"
+                      : "right-full top-1/2 transform -translate-y-1/2 border-r-gray-800"
+              } border-solid border-8 border-transparent`}
+            ></div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -254,16 +407,18 @@ const ProgressIndicator = ({ currentStep, totalSteps, completedSteps, onStepClic
   return (
     <div className="w-full mb-8">
       <div className="flex justify-between mb-2">
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Progress</span>
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+        <span className="text-sm font-medium text-gray-700">Progress</span>
+        <span className="text-sm font-medium text-gray-700">
           {completedSteps}/{totalSteps} completed
         </span>
       </div>
-      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
-        <div
-          className="bg-blue-600 dark:bg-blue-500 h-2.5 rounded-full transition-all duration-300 ease-in-out"
-          style={{ width: `${(completedSteps / totalSteps) * 100}%` }}
-        ></div>
+      <div className="w-full bg-gray-200 rounded-full h-2.5">
+        <motion.div
+          className="bg-blue-600 h-2.5 rounded-full"
+          initial={{ width: 0 }}
+          animate={{ width: `${(completedSteps / totalSteps) * 100}%` }}
+          transition={{ duration: 0.5, ease: "easeInOut" }}
+        ></motion.div>
       </div>
       <div className="relative mt-1">
         <div className="absolute inset-0 flex">
@@ -273,10 +428,10 @@ const ProgressIndicator = ({ currentStep, totalSteps, completedSteps, onStepClic
                 onClick={() => onStepClick(index)}
                 className={`w-4 h-4 rounded-full transition-colors ${
                   index < completedSteps
-                    ? "bg-blue-600 dark:bg-blue-500"
+                    ? "bg-blue-600"
                     : index === currentStep
-                      ? "border-2 border-blue-600 dark:border-blue-500 bg-white dark:bg-gray-800"
-                      : "bg-gray-300 dark:bg-gray-600"
+                      ? "border-2 border-blue-600 bg-white"
+                      : "bg-gray-300"
                 }`}
                 aria-label={`Go to step ${index + 1}`}
               ></button>
@@ -302,7 +457,13 @@ const ComparisonView = ({ originalImage, processedImage, onClose }) => {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4">
+    <motion.div
+      className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+    >
       <div className="absolute top-4 right-4">
         <button
           onClick={onClose}
@@ -334,12 +495,18 @@ const ComparisonView = ({ originalImage, processedImage, onClose }) => {
               style={{ imageOrientation: "from-image" }}
             />
           </div>
-          <div className="absolute inset-y-0 w-1 bg-white cursor-col-resize" style={{ left: `${position}%` }}>
+          <motion.div
+            className="absolute inset-y-0 w-1 bg-white cursor-col-resize"
+            style={{ left: `${position}%` }}
+            initial={{ height: 0 }}
+            animate={{ height: "100%" }}
+            transition={{ duration: 0.5 }}
+          >
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-white rounded-full flex items-center justify-center">
               <ArrowLeft className="w-3 h-3 text-gray-800" />
               <ArrowRight className="w-3 h-3 text-gray-800" />
             </div>
-          </div>
+          </motion.div>
           <div className="absolute bottom-4 left-4 bg-black bg-opacity-50 text-white px-3 py-1 rounded-md">
             Original
           </div>
@@ -348,7 +515,7 @@ const ComparisonView = ({ originalImage, processedImage, onClose }) => {
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -395,19 +562,20 @@ const MetricCard = ({
 
   return (
     <motion.div
-      className={`bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden relative ${isActive ? "ring-2 ring-blue-500 dark:ring-blue-400" : ""}`}
+      className={`bg-white rounded-lg shadow-lg overflow-hidden relative ${isActive ? "ring-2 ring-blue-500" : ""}`}
       initial={{ opacity: 0, y: 50 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -50 }}
       transition={{ duration: 0.5 }}
+      layout
     >
       <div className="p-4 sm:p-6">
         <div className="flex justify-between items-start mb-2">
-          <h3 className="text-xl font-semibold text-gray-800 dark:text-white">{metric.name}</h3>
+          <h3 className="text-xl font-semibold text-gray-800">{metric.name}</h3>
           <CustomTooltip content="View capture instructions" position="left">
             <button
               onClick={() => setShowInstructions(!showInstructions)}
-              className="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 transition-colors"
+              className="text-gray-500 hover:text-blue-600 transition-colors"
               aria-label="Toggle instructions"
             >
               <Info className="w-5 h-5" />
@@ -415,7 +583,7 @@ const MetricCard = ({
           </CustomTooltip>
         </div>
 
-        <p className="text-gray-600 dark:text-gray-300 mb-4">{metric.description}</p>
+        <p className="text-gray-600 mb-4">{metric.description}</p>
 
         <AnimatePresence>
           {showInstructions && (
@@ -423,11 +591,12 @@ const MetricCard = ({
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="bg-gray-100 dark:bg-gray-700 p-4 rounded-md mb-4 overflow-hidden"
+              transition={{ duration: 0.3 }}
+              className="bg-gray-100 p-4 rounded-md mb-4 overflow-hidden"
             >
-              <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-2">How to capture this metric:</h4>
-              <p className="text-gray-700 dark:text-gray-300">{metric.instructions}</p>
-              <p className="text-gray-700 dark:text-gray-300 mt-2">
+              <h4 className="font-semibold text-gray-800 mb-2">How to capture this metric:</h4>
+              <p className="text-gray-700">{metric.instructions}</p>
+              <p className="text-gray-700 mt-2">
                 <span className="font-semibold">Normal Range:</span> {metric.normalRange}
               </p>
             </motion.div>
@@ -437,7 +606,7 @@ const MetricCard = ({
         {hasImage ? (
           <div className="relative mb-4">
             <div
-              className={`aspect-video w-full flex items-center justify-center bg-gray-200 dark:bg-gray-700 rounded-md overflow-hidden ${isZoomed ? "h-[50vh]" : ""}`}
+              className={`aspect-video w-full flex items-center justify-center bg-gray-200 rounded-md overflow-hidden ${isZoomed ? "h-[50vh]" : ""}`}
             >
               <div className={`relative w-full h-full ${isZoomed ? "overflow-auto" : ""}`}>
                 <img
@@ -468,46 +637,62 @@ const MetricCard = ({
               )}
             </div>
 
-            <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1">
+            <motion.div
+              className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+            >
               <Check className="w-4 h-4" />
-            </div>
+            </motion.div>
 
             {estimatedAngle !== null && (
-              <div className="absolute bottom-2 left-2 bg-blue-600 dark:bg-blue-700 text-white rounded-md px-2 py-1 shadow-md">
+              <motion.div
+                className="absolute bottom-2 left-2 bg-blue-600 text-white rounded-md px-2 py-1 shadow-md"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+              >
                 Estimated Angle: {estimatedAngle}°
-              </div>
+              </motion.div>
             )}
 
             {canCompare && (
-              <button
+              <motion.button
                 onClick={() => setShowComparison(true)}
-                className="absolute top-2 left-2 bg-purple-600 dark:bg-purple-700 text-white rounded-md px-2 py-1 text-xs flex items-center shadow-md transition-colors hover:bg-purple-700 dark:hover:bg-purple-800"
+                className="absolute top-2 left-2 bg-purple-600 text-white rounded-md px-2 py-1 text-xs flex items-center shadow-md transition-colors hover:bg-purple-700"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 }}
               >
                 <Eye className="w-3 h-3 mr-1" />
                 Compare
-              </button>
+              </motion.button>
             )}
           </div>
         ) : (
-          <div className="aspect-video bg-gray-200 dark:bg-gray-700 flex flex-col items-center justify-center rounded-md mb-4 p-4">
-            <Upload className="w-12 h-12 text-gray-400 dark:text-gray-500 mb-2" />
-            <p className="text-gray-500 dark:text-gray-400 text-center">No image uploaded</p>
-            <p className="text-gray-400 dark:text-gray-500 text-sm text-center mt-1">
-              Click the button below to upload
-            </p>
+          <div className="aspect-video bg-gray-200 flex flex-col items-center justify-center rounded-md mb-4 p-4">
+            <Upload className="w-12 h-12 text-gray-400 mb-2" />
+            <p className="text-gray-500 text-center">No image uploaded</p>
+            <p className="text-gray-400 text-sm text-center mt-1">Click the button below to upload</p>
           </div>
         )}
 
         {imageError && (
-          <div className="text-red-500 text-sm mb-2 bg-red-100 dark:bg-red-900 dark:text-red-200 p-2 rounded">
+          <motion.div
+            className="text-red-500 text-sm mb-2 bg-red-100 p-2 rounded"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+          >
             {imageError}
-          </div>
+          </motion.div>
         )}
       </div>
 
-      <div className="px-4 sm:px-6 py-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700">
+      <div className="px-4 sm:px-6 py-4 bg-gray-50 border-t border-gray-200">
         <button
-          className={`w-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white font-bold py-2 px-4 rounded flex items-center justify-center transition-colors ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+          className={`w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex items-center justify-center transition-colors ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
           onClick={() => !disabled && fileInputRef.current.click()}
           disabled={disabled}
         >
@@ -524,13 +709,15 @@ const MetricCard = ({
         />
       </div>
 
-      {showComparison && (
-        <ComparisonView
-          originalImage={uploadedImage}
-          processedImage={estimatedImage}
-          onClose={() => setShowComparison(false)}
-        />
-      )}
+      <AnimatePresence>
+        {showComparison && (
+          <ComparisonView
+            originalImage={uploadedImage}
+            processedImage={estimatedImage}
+            onClose={() => setShowComparison(false)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }
@@ -551,9 +738,15 @@ const PoseEstimationLoader = () => {
   }, [])
 
   return (
-    <div className="fixed inset-0 bg-white dark:bg-gray-900 bg-opacity-90 dark:bg-opacity-90 flex items-center justify-center z-50">
+    <motion.div
+      className="fixed inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+    >
       <div className="max-w-md w-full p-6 space-y-8">
-        {/* Pac-Man Loader */}
+        {/* Single Pac-Man Loader */}
         <div className="flex justify-center">
           <div className="pacman-loader">
             <div className="pacman">
@@ -569,17 +762,31 @@ const PoseEstimationLoader = () => {
         </div>
 
         <div className="text-center space-y-4">
-          <p className="text-lg text-gray-600 dark:text-gray-300">Please wait while we process your images...</p>
+          <p className="text-lg text-gray-600">Please wait while we process your images...</p>
 
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-            <h3 className="text-blue-700 dark:text-blue-300 font-medium mb-2">Did you know?</h3>
-            <p className="text-gray-700 dark:text-gray-300 animate-fade min-h-[60px] flex items-center justify-center">
-              {didYouKnowFacts[currentFactIndex]}
-            </p>
-          </div>
+          <motion.div
+            className="bg-blue-50 p-4 rounded-lg"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.3 }}
+          >
+            <h3 className="text-blue-700 font-medium mb-2">Did you know?</h3>
+            <AnimatePresence mode="wait">
+              <motion.p
+                key={currentFactIndex}
+                className="text-gray-700 min-h-[60px] flex items-center justify-center"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.5 }}
+              >
+                {didYouKnowFacts[currentFactIndex]}
+              </motion.p>
+            </AnimatePresence>
+          </motion.div>
         </div>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -587,47 +794,69 @@ const PoseEstimationLoader = () => {
  * Side selector component for choosing left or right side
  */
 const SideSelector = ({ selectedSide, onSelectSide, disabled }) => (
-  <div className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-md mb-6">
-    <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">Select Side for Analysis</h3>
-    <p className="text-gray-600 dark:text-gray-300 mb-4">
+  <motion.div
+    className="bg-white p-4 sm:p-6 rounded-lg shadow-md mb-6"
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.5 }}
+  >
+    <h3 className="text-lg font-semibold text-gray-800 mb-4">Select Side for Analysis</h3>
+    <p className="text-gray-600 mb-4">
       Please select which side of your body you are analyzing. This is important for accurate pose estimation.
     </p>
     <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4">
-      <button
+      <motion.button
         className={`flex-1 py-3 px-4 rounded-lg border-2 flex items-center justify-center transition-colors ${
           selectedSide === "left"
-            ? "border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-500 dark:bg-blue-900 dark:bg-opacity-30 dark:text-blue-300"
-            : "border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+            ? "border-blue-600 bg-blue-50 text-blue-700"
+            : "border-gray-300 text-gray-700 hover:bg-gray-50"
         } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
         onClick={() => !disabled && onSelectSide("left")}
         disabled={disabled}
+        whileHover={!disabled ? { scale: 1.02 } : {}}
+        whileTap={!disabled ? { scale: 0.98 } : {}}
       >
         <span className="font-medium">Left Side</span>
-      </button>
-      <button
+      </motion.button>
+      <motion.button
         className={`flex-1 py-3 px-4 rounded-lg border-2 flex items-center justify-center transition-colors ${
           selectedSide === "right"
-            ? "border-blue-600 bg-blue-50 text-blue-700 dark:border-blue-500 dark:bg-blue-900 dark:bg-opacity-30 dark:text-blue-300"
-            : "border-gray-300 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+            ? "border-blue-600 bg-blue-50 text-blue-700"
+            : "border-gray-300 text-gray-700 hover:bg-gray-50"
         } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
         onClick={() => !disabled && onSelectSide("right")}
         disabled={disabled}
+        whileHover={!disabled ? { scale: 1.02 } : {}}
+        whileTap={!disabled ? { scale: 0.98 } : {}}
       >
         <span className="font-medium">Right Side</span>
-      </button>
+      </motion.button>
     </div>
-  </div>
+  </motion.div>
 )
 
 /**
  * PDF Report component for generating and displaying reports
  */
-const PdfReport = ({ patientInfo, results, metrics, selectedSide, onClose }) => {
+const PdfReport = ({ patientInfo, results, metrics, selectedSide, onClose, onUpdatePatientInfo }) => {
   const reportRef = useRef(null)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [patientName, setPatientName] = useState("")
-  const [patientId, setPatientId] = useState("")
-  const [clinicianName, setClinicianName] = useState("")
+  const [patientName, setPatientName] = useState(patientInfo.patientName || "")
+  const [patientId, setPatientId] = useState(patientInfo.patientId || "")
+  const [clinicianName, setClinicianName] = useState(patientInfo.clinicianName || "")
+  const [diagnosisType, setDiagnosisType] = useState(patientInfo.diagnosisType || "")
+
+  // Update parent component's patient info when fields change
+  useEffect(() => {
+    onUpdatePatientInfo({
+      patientName,
+      patientId,
+      clinicianName,
+      diagnosisType,
+      date: patientInfo.date,
+      time: patientInfo.time,
+    })
+  }, [patientName, patientId, clinicianName, diagnosisType, onUpdatePatientInfo, patientInfo.date, patientInfo.time])
 
   // Generate PDF from the report content
   const generatePDF = async () => {
@@ -635,45 +864,46 @@ const PdfReport = ({ patientInfo, results, metrics, selectedSide, onClose }) => 
 
     setIsGenerating(true)
     try {
+      // Create a new PDF document
       const pdf = new jsPDF({
         unit: "mm",
         format: "a4",
         compress: true,
       })
 
-      const canvas = await html2canvas(reportRef.current, {
-        scale: 2,
-        logging: false,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: "#ffffff",
-        imageTimeout: 15000,
-        onclone: (clonedDoc) => {
-          // Ensure proper styling in cloned document
-          Array.from(clonedDoc.getElementsByTagName("img")).forEach((img) => {
-            img.style.maxWidth = "100%"
-            img.style.height = "auto"
-            img.style.pageBreakInside = "avoid"
-          })
-        },
-      })
+      // First page - Images
+      const imagesSection = document.getElementById("pdf-images-section")
+      if (imagesSection) {
+        const imagesCanvas = await html2canvas(imagesSection, {
+          scale: 2,
+          logging: false,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: "#ffffff",
+          imageTimeout: 15000,
+        })
 
-      const imgWidth = 210 // A4 width in mm
-      const pageHeight = 297 // A4 height in mm
-      const imgHeight = (canvas.height * imgWidth) / canvas.width
-      let heightLeft = imgHeight
-      let position = 0
+        const imgWidth = 210 // A4 width in mm
+        const imgHeight = (imagesCanvas.height * imgWidth) / imagesCanvas.width
+        pdf.addImage(imagesCanvas, "PNG", 0, 0, imgWidth, imgHeight, "", "FAST")
+      }
 
-      // First page
-      pdf.addImage(canvas, "PNG", 0, position, imgWidth, imgHeight, "", "FAST")
-      heightLeft -= pageHeight
+      // Second page - Text report
+      pdf.addPage()
+      const textSection = document.getElementById("pdf-text-section")
+      if (textSection) {
+        const textCanvas = await html2canvas(textSection, {
+          scale: 2,
+          logging: false,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: "#ffffff",
+          imageTimeout: 15000,
+        })
 
-      // Additional pages if needed
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight
-        pdf.addPage()
-        pdf.addImage(canvas, "PNG", 0, position, imgWidth, imgHeight, "", "FAST")
-        heightLeft -= pageHeight
+        const imgWidth = 210 // A4 width in mm
+        const imgHeight = (textCanvas.height * imgWidth) / textCanvas.width
+        pdf.addImage(textCanvas, "PNG", 0, 0, imgWidth, imgHeight, "", "FAST")
       }
 
       pdf.save(`Clinical_Pose_Estimation_Report_${selectedSide}_${new Date().toISOString().split("T")[0]}.pdf`)
@@ -699,177 +929,105 @@ const PdfReport = ({ patientInfo, results, metrics, selectedSide, onClose }) => 
   }, [results, metrics])
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 dark:bg-gray-900 dark:bg-opacity-90 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center sticky top-0 bg-white dark:bg-gray-800 z-10">
-          <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Clinical Pose Estimation Report</h2>
+    <motion.div
+      className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      <motion.div
+        className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+        initial={{ scale: 0.9, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <div className="p-6 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
+          <h2 className="text-2xl font-bold text-gray-800">Clinical Pose Estimation Report</h2>
           <div className="flex space-x-2">
-            <button
+            <motion.button
               onClick={generatePDF}
               disabled={isGenerating}
-              className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white py-2 px-4 rounded-lg flex items-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg flex items-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
               {isGenerating ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Download className="w-5 h-5 mr-2" />}
               {isGenerating ? "Generating..." : "Download PDF"}
-            </button>
-            <button
+            </motion.button>
+            <motion.button
               onClick={onClose}
-              className="bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 py-2 px-4 rounded-lg transition-colors"
+              className="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-lg transition-colors"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
               Close
-            </button>
+            </motion.button>
           </div>
         </div>
 
         {/* Patient Information Form */}
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-4">Patient Information</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div className="p-6 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4">Patient Information</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Patient Name</label>
+              <label className="block text-sm font-medium text-gray-700">Patient Name</label>
               <input
                 type="text"
                 value={patientName}
                 onChange={(e) => setPatientName(e.target.value)}
                 placeholder="Enter patient name"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 transition-colors"
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Patient ID</label>
+              <label className="block text-sm font-medium text-gray-700">Patient ID</label>
               <input
                 type="text"
                 value={patientId}
                 onChange={(e) => setPatientId(e.target.value)}
                 placeholder="Enter patient ID"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 transition-colors"
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Clinician Name</label>
+              <label className="block text-sm font-medium text-gray-700">Clinician Name</label>
               <input
                 type="text"
                 value={clinicianName}
                 onChange={(e) => setClinicianName(e.target.value)}
                 placeholder="Enter clinician name"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">Diagnosis Type</label>
+              <input
+                type="text"
+                value={diagnosisType}
+                onChange={(e) => setDiagnosisType(e.target.value)}
+                placeholder="Enter diagnosis type"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 transition-colors"
               />
             </div>
           </div>
         </div>
 
         <div className="p-6" ref={reportRef}>
-          {/* Report Header */}
-          <div className="mb-8 pb-6 border-b border-gray-200 dark:border-gray-700 flex flex-col md:flex-row justify-between">
-            <div className="mb-4 md:mb-0">
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Clinical Pose Estimation Report</h1>
-              <p className="text-gray-600 dark:text-gray-300 text-sm">
-                Generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
-              </p>
-            </div>
-            <div className="flex items-center justify-center bg-blue-50 dark:bg-blue-900 dark:bg-opacity-20 p-3 rounded-lg">
-              <FileCheck className="w-6 h-6 text-blue-600 dark:text-blue-400 mr-2" />
-              <div>
-                <p className="font-semibold text-blue-700 dark:text-blue-300">Analysis ID</p>
-                <p className="text-blue-800 dark:text-blue-200">
-                  {Math.random().toString(36).substring(2, 10).toUpperCase()}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Patient Information Display */}
-          <div className="mb-8 pb-6 border-b border-gray-200 dark:border-gray-700">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg">
-                <h4 className="text-sm uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
-                  Patient Details
-                </h4>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-300">Name:</span>
-                    <span className="font-medium text-gray-800 dark:text-gray-200">
-                      {patientName || "Not specified"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-300">ID:</span>
-                    <span className="font-medium text-gray-800 dark:text-gray-200">{patientId || "Not specified"}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-300">Clinician:</span>
-                    <span className="font-medium text-gray-800 dark:text-gray-200">
-                      {clinicianName || "Not specified"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg">
-                <h4 className="text-sm uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
-                  Assessment Summary
-                </h4>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-300">Date:</span>
-                    <span className="font-medium text-gray-800 dark:text-gray-200">
-                      {new Date().toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-300">Side Analyzed:</span>
-                    <span className="font-medium text-gray-800 dark:text-gray-200">
-                      {selectedSide.charAt(0).toUpperCase() + selectedSide.slice(1)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-600 dark:text-gray-300">Abnormal Findings:</span>
-                    <span
-                      className={`font-medium ${abnormalCount > 0 ? "text-yellow-600 dark:text-yellow-400" : "text-green-600 dark:text-green-400"}`}
-                    >
-                      {abnormalCount} of {metrics.length}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Pose Estimation Results */}
-          <div className="mb-8">
-            <h3 className="text-xl font-semibold text-gray-800 dark:text-white mb-4">Pose Estimation Results</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Images Section - Will be on first page of PDF */}
+          <div id="pdf-images-section" className="mb-8" data-page-break="avoid">
+            <h3 className="text-xl font-semibold text-gray-800 mb-4">Images</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {metrics.map((metric) => {
                 const result = results && results[metric.fieldName]
-                const isNormal =
-                  result && result.angle !== null && isWithinNormalRange(result.angle, metric.normalRange)
-
                 return (
-                  <div
-                    key={metric.name}
-                    className={`border ${isNormal ? "border-green-200 dark:border-green-800" : "border-yellow-200 dark:border-yellow-800"} rounded-lg overflow-hidden`}
-                  >
-                    <div
-                      className={`${isNormal ? "bg-green-50 dark:bg-green-900 dark:bg-opacity-20" : "bg-yellow-50 dark:bg-yellow-900 dark:bg-opacity-20"} p-3 border-b ${isNormal ? "border-green-200 dark:border-green-800" : "border-yellow-200 dark:border-yellow-800"}`}
-                    >
-                      <div className="flex justify-between items-center">
-                        <h4 className="font-semibold text-gray-800 dark:text-white">{metric.name}</h4>
-                        {result && result.angle !== null && (
-                          <div
-                            className={`px-3 py-1 rounded-full text-sm font-medium ${
-                              isNormal
-                                ? "bg-green-100 text-green-800 dark:bg-green-900 dark:bg-opacity-50 dark:text-green-300"
-                                : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:bg-opacity-50 dark:text-yellow-300"
-                            }`}
-                          >
-                            {isNormal ? "Normal" : "Attention"}
-                          </div>
-                        )}
-                      </div>
+                  <div key={metric.name} className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="bg-gray-50 p-3 border-b border-gray-200">
+                      <h4 className="font-semibold text-gray-800">{metric.name}</h4>
                     </div>
-                    <div className="p-4">
+                    <div className="p-2">
                       {result && result.image ? (
-                        <div className="aspect-video w-full flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-md overflow-hidden mb-3">
+                        <div className="aspect-video w-full flex items-center justify-center bg-gray-100 rounded-md overflow-hidden">
                           <img
                             src={result.image || "/placeholder.svg"}
                             alt={metric.name}
@@ -878,23 +1036,10 @@ const PdfReport = ({ patientInfo, results, metrics, selectedSide, onClose }) => 
                           />
                         </div>
                       ) : (
-                        <div className="aspect-video w-full flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-md mb-3">
-                          <p className="text-gray-500 dark:text-gray-400">No image available</p>
+                        <div className="aspect-video w-full flex items-center justify-center bg-gray-100 rounded-md">
+                          <p className="text-gray-500">No image available</p>
                         </div>
                       )}
-
-                      <div className="grid grid-cols-2 gap-4 mt-3">
-                        <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md">
-                          <p className="text-gray-700 dark:text-gray-300 text-sm mb-1">Measured Angle</p>
-                          <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                            {result && result.angle !== null ? `${result.angle.toFixed(1)}°` : "N/A"}
-                          </p>
-                        </div>
-                        <div className="bg-gray-50 dark:bg-gray-900 p-3 rounded-md">
-                          <p className="text-gray-700 dark:text-gray-300 text-sm mb-1">Normal Range</p>
-                          <p className="text-lg font-semibold text-gray-900 dark:text-white">{metric.normalRange}</p>
-                        </div>
-                      </div>
                     </div>
                   </div>
                 )
@@ -902,35 +1047,409 @@ const PdfReport = ({ patientInfo, results, metrics, selectedSide, onClose }) => 
             </div>
           </div>
 
-          {/* Observations & Insights */}
-          <div className="mb-8">
-            <h3 className="text-xl font-semibold text-gray-800 dark:text-white mb-4">Observations & Insights</h3>
-            <div className="bg-blue-50 dark:bg-blue-900 dark:bg-opacity-20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <p className="text-gray-700 dark:text-gray-300 mb-4">
-                This report provides an automated analysis of joint angles based on pose estimation technology. The
-                results should be interpreted by a qualified healthcare professional.
-              </p>
-              <div className="border-l-4 border-blue-500 dark:border-blue-400 pl-4 py-1">
-                <p className="text-gray-700 dark:text-gray-300 italic">{generateInsights(results, metrics)}</p>
+          {/* Text Report Section - Will be on second page of PDF */}
+          <div id="pdf-text-section" data-page-break="avoid">
+            {/* Report Header */}
+            <div className="mb-8 pb-6 border-b border-gray-200 flex flex-col md:flex-row justify-between">
+              <div className="mb-4 md:mb-0">
+                <h1 className="text-2xl font-bold text-gray-900 mb-1">Clinical Pose Estimation Report</h1>
+                <p className="text-gray-600 text-sm">
+                  Generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
+                </p>
+              </div>
+              <div className="flex items-center justify-center bg-blue-50 p-3 rounded-lg">
+                <FileCheck className="w-6 h-6 text-blue-600 mr-2" />
+                <div>
+                  <p className="font-semibold text-blue-700">Analysis ID</p>
+                  <p className="text-blue-800">{Math.random().toString(36).substring(2, 10).toUpperCase()}</p>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Footer */}
-          <div className="text-sm text-gray-500 dark:text-gray-400 mt-8 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="flex flex-col md:flex-row justify-between">
-              <div>
-                <p>Generated using Clinical Pose Estimation System</p>
-                <p>This report is for informational purposes only and does not constitute medical advice.</p>
+            {/* Patient Information Display */}
+            <div className="mb-8 pb-6 border-b border-gray-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h4 className="text-sm uppercase tracking-wider text-gray-500 mb-2">Patient Details</h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Name:</span>
+                      <span className="font-medium text-gray-800">{patientName || "Not specified"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">ID:</span>
+                      <span className="font-medium text-gray-800">{patientId || "Not specified"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Clinician:</span>
+                      <span className="font-medium text-gray-800">{clinicianName || "Not specified"}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Diagnosis:</span>
+                      <span className="font-medium text-gray-800">{diagnosisType || "Not specified"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h4 className="text-sm uppercase tracking-wider text-gray-500 mb-2">Assessment Summary</h4>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Date:</span>
+                      <span className="font-medium text-gray-800">{new Date().toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Side Analyzed:</span>
+                      <span className="font-medium text-gray-800">
+                        {selectedSide.charAt(0).toUpperCase() + selectedSide.slice(1)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Abnormal Findings:</span>
+                      <span className={`font-medium ${abnormalCount > 0 ? "text-yellow-600" : "text-green-600"}`}>
+                        {abnormalCount} of {metrics.length}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="mt-2 md:mt-0 text-right">
-                <p>Page 1 of 1</p>
+            </div>
+
+            {/* Pose Estimation Results */}
+            <div className="mb-8">
+              <h3 className="text-xl font-semibold text-gray-800 mb-4">Pose Estimation Results</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {metrics.map((metric) => {
+                  const result = results && results[metric.fieldName]
+                  const isNormal =
+                    result && result.angle !== null && isWithinNormalRange(result.angle, metric.normalRange)
+
+                  return (
+                    <div
+                      key={metric.name}
+                      className={`border ${isNormal ? "border-green-200" : "border-yellow-200"} rounded-lg overflow-hidden`}
+                    >
+                      <div
+                        className={`${isNormal ? "bg-green-50" : "bg-yellow-50"} p-3 border-b ${isNormal ? "border-green-200" : "border-yellow-200"}`}
+                      >
+                        <div className="flex justify-between items-center">
+                          <h4 className="font-semibold text-gray-800">{metric.name}</h4>
+                          {result && result.angle !== null && (
+                            <div
+                              className={`px-3 py-1 rounded-full text-sm font-medium ${
+                                isNormal ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
+                              }`}
+                            >
+                              {isNormal ? "Normal" : "Attention"}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="p-4">
+                        <div className="grid grid-cols-2 gap-4 mt-3">
+                          <div className="bg-gray-50 p-3 rounded-md">
+                            <p className="text-gray-700 text-sm mb-1">Measured Angle</p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              {result && result.angle !== null ? `${result.angle.toFixed(1)}°` : "N/A"}
+                            </p>
+                          </div>
+                          <div className="bg-gray-50 p-3 rounded-md">
+                            <p className="text-gray-700 text-sm mb-1">Normal Range</p>
+                            <p className="text-lg font-semibold text-gray-900">{metric.normalRange}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Observations & Insights */}
+            <div className="mb-8">
+              <h3 className="text-xl font-semibold text-gray-800 mb-4">Observations & Insights</h3>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-gray-700 mb-4">
+                  This report provides an automated analysis of joint angles based on pose estimation technology. The
+                  results should be interpreted by a qualified healthcare professional.
+                </p>
+                <div className="border-l-4 border-blue-500 pl-4 py-1">
+                  <p className="text-gray-700 italic">{generateInsights(results, metrics)}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="text-sm text-gray-500 mt-8 pt-4 border-t border-gray-200">
+              <div className="flex flex-col md:flex-row justify-between">
+                <div>
+                  <p>Generated using Clinical Pose Estimation System</p>
+                  <p>This report is for informational purposes only and does not constitute medical advice.</p>
+                </div>
+                <div className="mt-2 md:mt-0 text-right">
+                  <p>Page 2 of 2</p>
+                </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+/**
+ * CSV Export Modal component for configuring CSV export options
+ */
+const CSVExportModal = ({ isOpen, onClose, onExport, patientInfo, onUpdatePatientInfo }) => {
+  const modalRef = useRef(null)
+  const [patientName, setPatientName] = useState(patientInfo.patientName || "")
+  const [patientId, setPatientId] = useState(patientInfo.patientId || "")
+  const [diagnosisType, setDiagnosisType] = useState(patientInfo.diagnosisType || "")
+  const [selectedColumns, setSelectedColumns] = useState({
+    "Patient Name": true,
+    "Patient ID": true,
+    "Metric Name": true,
+    Angle: true,
+    "Normal Range": false,
+    Status: false,
+    Side: false,
+    Diagnosis: true, // Pre-selected by default
+    Date: false,
+    Time: false,
+    "Clinician Name": false,
+  })
+
+  // Handle click outside to close
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (modalRef.current && !modalRef.current.contains(event.target)) {
+        onClose()
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside)
+    }
+  }, [isOpen, onClose])
+
+  // Generate a unique ID if patient ID is empty
+  const handleExport = () => {
+    // Generate a unique ID if not provided
+    const finalPatientId = patientId || generateUniqueId()
+
+    // Update patient info in parent component
+    const updatedInfo = {
+      ...patientInfo,
+      patientName,
+      patientId: finalPatientId,
+      diagnosisType,
+    }
+
+    onUpdatePatientInfo(updatedInfo)
+
+    // Trigger export with selected columns
+    onExport(selectedColumns, updatedInfo)
+    onClose()
+  }
+
+  const toggleColumn = (columnName) => {
+    setSelectedColumns((prev) => ({
+      ...prev,
+      [columnName]: !prev[columnName],
+    }))
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <motion.div
+      className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3 }}
+    >
+      <motion.div
+        ref={modalRef}
+        className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
+        initial={{ scale: 0.9, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <div className="p-6 border-b border-gray-200 sticky top-0 bg-white z-10">
+          <h2 className="text-xl font-bold text-gray-800">Export Data to CSV</h2>
+        </div>
+
+        <div className="p-6 space-y-6 overflow-y-auto">
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium text-gray-800">Patient Information</h3>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Patient Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={patientName}
+                onChange={(e) => setPatientName(e.target.value)}
+                placeholder="Enter patient name"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">Patient ID (auto-generated if empty)</label>
+              <input
+                type="text"
+                value={patientId}
+                onChange={(e) => setPatientId(e.target.value)}
+                placeholder="Enter patient ID or leave empty for auto-generation"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Diagnosis <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={diagnosisType}
+                onChange={(e) => setDiagnosisType(e.target.value)}
+                placeholder="Enter diagnosis"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium text-gray-800">Select Columns to Export</h3>
+            <p className="text-sm text-gray-600">
+              Select which columns to include in your CSV export. The columns will be ordered as shown below.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3">
+              {Object.entries(selectedColumns).map(([columnName, isSelected]) => (
+                <div key={columnName} className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id={`column-${columnName}`}
+                    checked={isSelected}
+                    onChange={() => toggleColumn(columnName)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded transition-colors"
+                    disabled={["Patient Name", "Patient ID", "Metric Name", "Angle"].includes(columnName)}
+                  />
+                  <label htmlFor={`column-${columnName}`} className="ml-2 block text-sm text-gray-700">
+                    {columnName}
+                    {["Patient Name", "Patient ID", "Metric Name", "Angle"].includes(columnName) && (
+                      <span className="text-xs text-gray-500 ml-1">(required)</span>
+                    )}
+                  </label>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3 sticky bottom-0">
+          <motion.button
+            onClick={onClose}
+            className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            Cancel
+          </motion.button>
+          <motion.button
+            onClick={handleExport}
+            disabled={!patientName || !diagnosisType}
+            className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            whileHover={patientName && diagnosisType ? { scale: 1.05 } : {}}
+            whileTap={patientName && diagnosisType ? { scale: 0.95 } : {}}
+          >
+            Export CSV
+          </motion.button>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
+/**
+ * Mobile navigation component
+ */
+const MobileNav = ({ isOpen, onClose }) => {
+  return (
+    <motion.div
+      className={`fixed inset-0 bg-gray-900 bg-opacity-50 z-40 ${isOpen ? "block" : "hidden"}`}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: isOpen ? 1 : 0 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+    >
+      <motion.div
+        className="fixed inset-y-0 left-0 max-w-xs w-full bg-white shadow-xl"
+        initial={{ x: "-100%" }}
+        animate={{ x: isOpen ? 0 : "-100%" }}
+        exit={{ x: "-100%" }}
+        transition={{ duration: 0.3 }}
+      >
+        <div className="p-6 flex flex-col h-full">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center">
+              <Activity className="w-6 h-6 text-blue-600 mr-2" />
+              <span className="text-xl font-bold text-gray-900">Pose Estimation</span>
+            </div>
+            <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+
+          <nav className="flex-1">
+            <ul className="space-y-2">
+              <li>
+                <a href="#" className="flex items-center p-3 text-gray-700 hover:bg-gray-100 rounded-lg">
+                  <Home className="w-5 h-5 mr-3" />
+                  <span>Home</span>
+                </a>
+              </li>
+              <li>
+                <a href="#" className="flex items-center p-3 text-gray-700 hover:bg-gray-100 rounded-lg">
+                  <BarChart className="w-5 h-5 mr-3" />
+                  <span>Analytics</span>
+                </a>
+              </li>
+              <li>
+                <a href="#" className="flex items-center p-3 text-gray-700 hover:bg-gray-100 rounded-lg">
+                  <User className="w-5 h-5 mr-3" />
+                  <span>Patients</span>
+                </a>
+              </li>
+              <li>
+                <a href="#" className="flex items-center p-3 text-gray-700 hover:bg-gray-100 rounded-lg">
+                  <Settings className="w-5 h-5 mr-3" />
+                  <span>Settings</span>
+                </a>
+              </li>
+            </ul>
+          </nav>
+
+          <div className="pt-6 border-t border-gray-200">
+            <div className="text-sm text-gray-500">
+              <p>Clinical Pose Estimation</p>
+              <p>Version {APP_VERSION}</p>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
   )
 }
 
@@ -951,12 +1470,19 @@ export default function PoseEstimationMetrics() {
   const [showEstimated, setShowEstimated] = useState(false)
   const [selectedSide, setSelectedSide] = useState(null)
   const [showReport, setShowReport] = useState(false)
-  const [isDarkMode, setIsDarkMode] = useState(false)
   const [error, setError] = useState(null)
+  const [success, setSuccess] = useState(null)
   const [patientInfo, setPatientInfo] = useState({
+    patientName: "",
+    patientId: "",
+    clinicianName: "",
+    diagnosisType: "",
     date: new Date().toLocaleDateString(),
     time: new Date().toLocaleTimeString(),
   })
+  const [showCSVExportModal, setShowCSVExportModal] = useState(false)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [isPWA, setIsPWA] = useState(false)
 
   // Derived state
   const allImagesUploaded = useMemo(() => metrics.every((metric) => uploadedImages[metric.name]), [uploadedImages])
@@ -965,56 +1491,18 @@ export default function PoseEstimationMetrics() {
   const canSubmit = allImagesUploaded && sideSelected
   const completedSteps = Object.keys(uploadedImages).length
 
-  // Dark mode handling
+  // Check if running as PWA
   useEffect(() => {
-    // Check for system preference
-    const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
-
-    // Set initial dark mode based on system preference or saved preference
-    const savedDarkMode = localStorage.getItem("darkMode")
-    // Default to light theme as requested
-    const initialDarkMode = savedDarkMode !== null ? savedDarkMode === "true" : false
-    setIsDarkMode(initialDarkMode)
-
-    // Apply dark mode
-    if (initialDarkMode) {
-      document.documentElement.classList.add("dark")
-    } else {
-      document.documentElement.classList.remove("dark")
-    }
-
-    // Listen for system preference changes
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)")
-    const handleChange = (e) => {
-      if (savedDarkMode === null) {
-        setIsDarkMode(e.matches)
-        if (e.matches) {
-          document.documentElement.classList.add("dark")
-        } else {
-          document.documentElement.classList.remove("dark")
-        }
-      }
-    }
-
-    if (mediaQuery.addEventListener) {
-      mediaQuery.addEventListener("change", handleChange)
-      return () => mediaQuery.removeEventListener("change", handleChange)
-    } else {
-      // Fallback for older browsers
-      mediaQuery.addListener(handleChange)
-      return () => mediaQuery.removeListener(handleChange)
+    if (typeof window !== "undefined") {
+      setIsPWA(isRunningAsStandalone())
     }
   }, [])
 
-  // Update dark mode when toggled
+  // Force light mode
   useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.classList.add("dark")
-    } else {
-      document.documentElement.classList.remove("dark")
-    }
-    localStorage.setItem("darkMode", isDarkMode.toString())
-  }, [isDarkMode])
+    // Remove dark mode class if present
+    document.documentElement.classList.remove("dark")
+  }, [])
 
   // Handlers
   const handleUpload = useCallback(
@@ -1041,6 +1529,10 @@ export default function PoseEstimationMetrics() {
             })
           }
         }
+
+        // Show success message
+        setSuccess(`Image for ${metricName} uploaded successfully`)
+        setTimeout(() => setSuccess(null), 3000)
       }
       reader.readAsDataURL(file)
     },
@@ -1092,6 +1584,8 @@ export default function PoseEstimationMetrics() {
 
         setResults(response.data)
         setShowEstimated(true)
+        setSuccess("Analysis completed successfully!")
+        setTimeout(() => setSuccess(null), 3000)
       } catch (apiError) {
         console.error("API Error:", apiError)
 
@@ -1132,6 +1626,8 @@ export default function PoseEstimationMetrics() {
     setShowEstimated(false)
     setShowReport(false)
     setError(null)
+    setSuccess("Ready for new images")
+    setTimeout(() => setSuccess(null), 3000)
   }, [])
 
   const toggleEstimatedView = useCallback(() => {
@@ -1150,36 +1646,89 @@ export default function PoseEstimationMetrics() {
     setError(null)
   }, [])
 
+  const dismissSuccess = useCallback(() => {
+    setSuccess(null)
+  }, [])
+
+  const handleUpdatePatientInfo = useCallback((newInfo) => {
+    setPatientInfo(newInfo)
+  }, [])
+
+  const handleExportCSVWithOptions = useCallback(
+    (selectedColumns, updatedPatientInfo) => {
+      if (!results || !selectedSide) return
+
+      const csvContent = generateCSV(results, metrics, selectedSide, updatedPatientInfo, selectedColumns)
+      const fileName = `Clinical_Pose_Estimation_Data_${selectedSide}_${new Date().toISOString().split("T")[0]}.csv`
+      downloadCSV(csvContent, fileName)
+
+      setSuccess("CSV file exported successfully")
+      setTimeout(() => setSuccess(null), 3000)
+    },
+    [results, metrics, selectedSide],
+  )
+
+  const handleExportCSV = useCallback(() => {
+    setShowCSVExportModal(true)
+  }, [])
+
+  const toggleMobileNav = useCallback(() => {
+    setMobileNavOpen((prev) => !prev)
+  }, [])
+
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors duration-200">
-      <header className="bg-white dark:bg-gray-800 shadow sticky top-0 z-10 transition-colors duration-200">
+    <div className="min-h-screen bg-gray-100 transition-colors duration-200">
+      <header className="bg-white shadow sticky top-0 z-10 transition-colors duration-200">
         <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
           <div className="flex items-center">
-            <Activity className="w-6 h-6 text-blue-600 dark:text-blue-400 mr-3" />
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Clinical Pose Estimation</h1>
+            {isPWA && (
+              <button onClick={toggleMobileNav} className="mr-3 md:hidden" aria-label="Open menu">
+                <Menu className="w-6 h-6 text-gray-700" />
+              </button>
+            )}
+            <Activity className="w-6 h-6 text-blue-600 mr-3" />
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Clinical Pose Estimation</h1>
           </div>
-          <button
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            className="p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-            aria-label="Toggle dark mode"
-          >
-            {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-          </button>
+          {isPWA && (
+            <div className="hidden md:flex items-center space-x-4">
+              <a href="#" className="text-gray-700 hover:text-blue-600 transition-colors">
+                Home
+              </a>
+              <a href="#" className="text-gray-700 hover:text-blue-600 transition-colors">
+                Analytics
+              </a>
+              <a href="#" className="text-gray-700 hover:text-blue-600 transition-colors">
+                Patients
+              </a>
+              <a href="#" className="text-gray-700 hover:text-blue-600 transition-colors">
+                Settings
+              </a>
+            </div>
+          )}
         </div>
       </header>
 
+      <AnimatePresence>
+        {mobileNavOpen && <MobileNav isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />}
+      </AnimatePresence>
+
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
-          <div className="mb-6">
-            <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 dark:text-white mb-2">
+          <motion.div
+            className="mb-6"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 mb-2">
               {results ? "Pose Estimation Results" : "Upload Images for Pose Estimation"}
             </h2>
-            <p className="text-gray-600 dark:text-gray-300">
+            <p className="text-gray-600">
               {results
                 ? "Review your pose estimation results below. You can recalculate or reupload images if needed."
                 : "Please select which side you are analyzing and upload an image for each of the following metrics."}
             </p>
-          </div>
+          </motion.div>
 
           {!results && (
             <>
@@ -1215,23 +1764,27 @@ export default function PoseEstimationMetrics() {
             </AnimatePresence>
 
             <div className="absolute top-1/2 left-0 transform -translate-y-1/2 -translate-x-1/2 sm:-translate-x-0">
-              <button
-                className="bg-white dark:bg-gray-800 p-2 rounded-full shadow-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+              <motion.button
+                className="bg-white p-2 rounded-full shadow-lg text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
                 onClick={handlePrevious}
                 aria-label="Previous metric"
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
               >
                 <ChevronLeft className="w-6 h-6" />
-              </button>
+              </motion.button>
             </div>
 
             <div className="absolute top-1/2 right-0 transform -translate-y-1/2 translate-x-1/2 sm:translate-x-0">
-              <button
-                className="bg-white dark:bg-gray-800 p-2 rounded-full shadow-lg text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+              <motion.button
+                className="bg-white p-2 rounded-full shadow-lg text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
                 onClick={handleNext}
                 aria-label="Next metric"
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
               >
                 <ChevronRight className="w-6 h-6" />
-              </button>
+              </motion.button>
             </div>
           </div>
 
@@ -1245,7 +1798,7 @@ export default function PoseEstimationMetrics() {
                       ? "bg-green-500"
                       : index === currentIndex
                         ? "bg-blue-500"
-                        : "bg-gray-300 dark:bg-gray-600"
+                        : "bg-gray-300"
                   }`}
                   onClick={() => setCurrentIndex(index)}
                   aria-label={`Go to ${metric.name}`}
@@ -1259,83 +1812,140 @@ export default function PoseEstimationMetrics() {
                   content={canSubmit ? "Send images for analysis" : "Upload all 6 images to enable analysis"}
                   position="top"
                 >
-                  <button
-                    className={`bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800 text-white font-bold py-3 px-6 rounded-lg text-lg flex items-center transition-colors ${!canSubmit ? "opacity-50 cursor-not-allowed" : ""}`}
+                  <motion.button
+                    className={`bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg text-lg flex items-center transition-colors ${!canSubmit ? "opacity-50 cursor-not-allowed" : ""}`}
                     onClick={handleSendToBackend}
                     disabled={!canSubmit}
+                    whileHover={canSubmit ? { scale: 1.05 } : {}}
+                    whileTap={canSubmit ? { scale: 0.95 } : {}}
                   >
                     <Send className="w-5 h-5 mr-2" />
                     Send Images to Backend
-                  </button>
+                  </motion.button>
                 </CustomTooltip>
               ) : (
                 <>
-                  <button
-                    className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-colors"
+                  <motion.button
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-colors"
                     onClick={handleRecalculate}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
                   >
                     <RefreshCw className="w-5 h-5 mr-2" />
                     Recalculate Angles
-                  </button>
-                  <button
-                    className="bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-colors"
+                  </motion.button>
+                  <motion.button
+                    className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-colors"
                     onClick={handleReupload}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
                   >
                     <UploadCloud className="w-5 h-5 mr-2" />
                     Reupload Images
-                  </button>
-                  <button
-                    className="bg-purple-600 hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-800 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-colors"
+                  </motion.button>
+                  <motion.button
+                    className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-colors"
                     onClick={handleShowReport}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
                   >
                     <FileDown className="w-5 h-5 mr-2" />
                     Show Detailed Report
-                  </button>
-                  <button
-                    className="bg-yellow-600 hover:bg-yellow-700 dark:bg-yellow-700 dark:hover:bg-yellow-800 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-colors"
+                  </motion.button>
+                  <motion.button
+                    className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-colors"
+                    onClick={handleExportCSV}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <FileText className="w-5 h-5 mr-2" />
+                    Export CSV
+                  </motion.button>
+                  <motion.button
+                    className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg flex items-center transition-colors"
                     onClick={toggleEstimatedView}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
                   >
                     {showEstimated ? <EyeOff className="w-5 h-5 mr-2" /> : <Eye className="w-5 h-5 mr-2" />}
                     {showEstimated ? "Hide Points" : "Show Points"}
-                  </button>
+                  </motion.button>
                 </>
               )}
             </div>
           </div>
 
           {!sideSelected && !results && (
-            <div className="mt-6 bg-yellow-50 dark:bg-yellow-900 dark:bg-opacity-20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-              <p className="text-yellow-700 dark:text-yellow-300">
+            <motion.div
+              className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <p className="text-yellow-700">
                 <span className="font-semibold">Important:</span> Please select which side (left or right) you are
                 analyzing before uploading images.
               </p>
-            </div>
+            </motion.div>
           )}
 
           {sideSelected && !allImagesUploaded && !results && (
-            <div className="mt-6 bg-blue-50 dark:bg-blue-900 dark:bg-opacity-20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <p className="text-blue-700 dark:text-blue-300">
+            <motion.div
+              className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <p className="text-blue-700">
                 <span className="font-semibold">Tip:</span> Upload an image for each of the 6 metrics to enable
                 analysis. You've uploaded {Object.keys(uploadedImages).length} of 6 required images.
               </p>
-            </div>
+            </motion.div>
           )}
         </div>
       </main>
 
-      {isProcessing && <PoseEstimationLoader />}
+      <footer className="bg-white border-t border-gray-200 py-4 mt-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <p className="text-sm text-gray-500">
+              © {new Date().getFullYear()} Clinical Pose Estimation. All rights reserved.
+            </p>
+            <p className="text-sm text-gray-500 mt-2 md:mt-0">Version {APP_VERSION}</p>
+          </div>
+        </div>
+      </footer>
 
-      {showReport && (
-        <PdfReport
-          patientInfo={patientInfo}
-          results={results}
-          metrics={metrics}
-          selectedSide={selectedSide}
-          onClose={handleCloseReport}
-        />
-      )}
+      <AnimatePresence>{isProcessing && <PoseEstimationLoader />}</AnimatePresence>
 
-      {error && <ErrorMessage message={error} onDismiss={dismissError} />}
+      <AnimatePresence>
+        {showReport && (
+          <PdfReport
+            patientInfo={patientInfo}
+            results={results}
+            metrics={metrics}
+            selectedSide={selectedSide}
+            onClose={handleCloseReport}
+            onUpdatePatientInfo={handleUpdatePatientInfo}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showCSVExportModal && (
+          <CSVExportModal
+            isOpen={showCSVExportModal}
+            onClose={() => setShowCSVExportModal(false)}
+            onExport={handleExportCSVWithOptions}
+            patientInfo={patientInfo}
+            onUpdatePatientInfo={handleUpdatePatientInfo}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>{error && <ErrorMessage message={error} onDismiss={dismissError} />}</AnimatePresence>
+
+      <AnimatePresence>{success && <SuccessMessage message={success} onDismiss={dismissSuccess} />}</AnimatePresence>
 
       {/* Add CSS for animations */}
       <style jsx global>{`
@@ -1460,6 +2070,43 @@ export default function PoseEstimationMetrics() {
         @keyframes fadeIn {
           0% { opacity: 0; }
           100% { opacity: 1; }
+        }
+
+        /* Responsive design improvements */
+        @media (max-width: 640px) {
+          .pacman-loader {
+            transform: scale(0.8);
+          }
+        }
+
+        /* Improve scrolling behavior */
+        html {
+          scroll-behavior: smooth;
+        }
+
+        /* Improve touch interactions */
+        @media (hover: none) {
+          button {
+            padding: 0.75rem !important;
+          }
+        }
+
+        /* Add smooth transitions */
+        * {
+          transition-property: background-color, border-color, color, fill, stroke;
+          transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+          transition-duration: 150ms;
+        }
+
+        /* Improve focus states for accessibility */
+        :focus {
+          outline: 2px solid rgba(59, 130, 246, 0.5);
+          outline-offset: 2px;
+        }
+
+        /* Improve form elements */
+        input, select, textarea {
+          font-size: 16px; /* Prevents zoom on iOS */
         }
       `}</style>
     </div>
