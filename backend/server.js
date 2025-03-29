@@ -39,9 +39,9 @@ const getMetricKeypoints = (metric, side) => {
         ankle: [`${prefix}_knee`, `${prefix}_ankle`, `${prefix}_foot_index`],
         knee: [`${prefix}_hip`, `${prefix}_knee`, `${prefix}_ankle`],
         hipFlexion: [`${prefix}_knee`, `${prefix}_hip`],
-        R1: [`${prefix}_knee`, `${prefix}_ankle`, `${prefix}_hip`],
+        R1: [`${prefix}_knee`, `${prefix}_ankle`],
         popliteal: [`${prefix}_knee`, `${prefix}_ankle`],
-        R2: [`${prefix}_knee`, `${prefix}_ankle`, `${prefix}_hip`],
+        R2: [`${prefix}_knee`, `${prefix}_ankle`],
     };
 
     return keypointsMap[metric] || [];
@@ -87,9 +87,9 @@ class ClinicalAngleCalculator {
             ankle: () => {
                 const knee = getPoint('knee');
                 const ankle = getPoint('ankle');
-                const toe = getPoint('foot_index');
-                return this.validateAndCalculate([knee, ankle, toe], 
-                    () => this.calculateAngle(knee, ankle, toe));
+                const foot_index = getPoint('foot_index');
+                return this.validateAndCalculate([knee, ankle, foot_index], 
+                    () => this.calculateAngle(knee, ankle, foot_index));
             },
 
             knee: () => {
@@ -112,10 +112,11 @@ class ClinicalAngleCalculator {
             R1: () => {
                 const knee = getPoint('knee');
                 const ankle = getPoint('ankle');
-                const hip = getPoint('hip');
-                if (!knee || !ankle) return null;
-                return this.calculateAngle(ankle, knee, hip);
+                const imaginaryVertical = { x: knee.x, y: knee.y - 100 };
+                return this.validateAndCalculate([ankle, knee, imaginaryVertical], 
+                    () => this.calculateAngle(ankle, knee, imaginaryVertical));
             },
+
 
             popliteal: () => {
                 const knee = getPoint('knee');
@@ -128,10 +129,11 @@ class ClinicalAngleCalculator {
             R2: () => {
                 const knee = getPoint('knee');
                 const ankle = getPoint('ankle');
-                const hip = getPoint('hip');
-                if (!knee || !ankle) return null;
-                return this.calculateAngle(ankle, knee, hip);
-            }
+                const imaginaryVertical = { x: knee.x, y: knee.y - 100 };
+                return this.validateAndCalculate([ankle, knee, imaginaryVertical], 
+                    () => this.calculateAngle(ankle, knee, imaginaryVertical));
+            },
+
         };
 
         return calculations[metric] ? calculations[metric]() : null;
@@ -147,8 +149,10 @@ class ClinicalAngleCalculator {
 
 
 // Enhanced annotation drawing
+// Enhanced annotation drawing
 const drawAnnotations = (keypoints, canvas, metric, angle, side) => {
     const ctx = canvas.getContext("2d");
+    console.log(metric);
 
     // Draw keypoints
     keypoints.forEach((kp) => {
@@ -168,10 +172,17 @@ const drawAnnotations = (keypoints, canvas, metric, angle, side) => {
     const hip = keypoints.find(kp => kp.name.includes("hip"));
     const knee = keypoints.find(kp => kp.name.includes("knee"));
     const ankle = keypoints.find(kp => kp.name.includes("ankle"));
+    const footIndex = keypoints.find(kp => kp.name.includes("foot_index"));
 
     // Draw lines between metric keypoints
     if (hip && knee) drawLine(ctx, hip, knee, "cyan");  // Hip to knee
     if (knee && ankle) drawLine(ctx, knee, ankle, "lime");  // Knee to ankle
+
+    // ✅ Fix: Draw lines for "ankle" metric (foot_index → ankle → knee)
+    if (metric === "ankle"&& footIndex) {
+        drawLine(ctx, footIndex, ankle, "yellow");  // Foot index to ankle
+        drawLine(ctx, ankle, knee, "blue");  // Ankle to knee
+    }
 
     // Draw imaginary points for metric calculations
     if (metric === "hipFlexion" && hip) {
@@ -183,13 +194,11 @@ const drawAnnotations = (keypoints, canvas, metric, angle, side) => {
         drawPoint(ctx, imaginaryHipPoint, "orange", "Imaginary");
     }
 
-    if (metric === "popliteal" && knee) {
+    if ((metric === "popliteal" || metric === "R1" || metric === "R2") && knee) {
         const imaginaryKneePoint = { x: knee.x, y: knee.y - 100 };
         drawLine(ctx, knee, imaginaryKneePoint, "purple", [5, 5]); // Dotted line
         drawPoint(ctx, imaginaryKneePoint, "purple", "Imaginary");
     }
-
-   
 };
 
 // Helper function to draw a line between two points
@@ -277,7 +286,8 @@ app.post('/analyze-metrics', (req, res) => {
                 const filteredKeypoints = keypoints.filter(kp =>
                     metricKeypoints.includes(kp.name) && kp.score > 0.5
                 );
-
+                console.log("Filtered Keypoints: ",filteredKeypoints);
+                console.log("metricKeypoints: ",metricKeypoints);
                 if (filteredKeypoints.length < metricKeypoints.length) {
                     return { [metric]: { error: 'Insufficient keypoints detected', angle: null, image: null } };
                 }

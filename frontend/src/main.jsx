@@ -1,14 +1,11 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import PoseEstimationMetrics from './components/3pose-estimation-metrics.jsx'
-
-
+import App from './App.jsx'
 import './index.css'
 
-// import App from './request .jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <PoseEstimationMetrics />
+    <App />
   </StrictMode>,
 )
