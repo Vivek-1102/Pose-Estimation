@@ -48,7 +48,7 @@ export default function Dashboard() {
             </div>
             <div className="hidden md:block">
               <img
-                src="https://img.freepik.com/free-vector/motion-capture-abstract-concept-illustration_335657-3823.jpg"
+                src="dashboard3.png"
                 alt="Pose Estimation Visualization"
                 className="w-full h-auto rounded-lg shadow-xl"
               />
@@ -73,7 +73,7 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
             <div>
               <img
-                src="https://miro.medium.com/v2/resize:fit:1400/1*JyPqG4TNUXJxEXGfRnNpbQ.png"
+                src="Dashboard2.jpg"
                 alt="Pose Estimation Diagram"
                 className="w-full h-auto rounded-lg shadow-lg"
               />

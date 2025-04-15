@@ -8,35 +8,35 @@ export default function AboutPage() {
   // Team members data
   const teamMembers = [
     {
-      name: "Dr. Sarah Johnson",
-      role: "Lead Researcher",
-      image: "/team-member-1.jpg",
-      bio: "Dr. Johnson has over 15 years of experience in biomechanics and movement analysis. She leads our research team in developing advanced pose estimation algorithms for clinical applications.",
-      education: "Ph.D. in Biomechanical Engineering, Stanford University",
-      expertise: ["Movement Analysis", "Clinical Biomechanics", "AI in Healthcare"],
+      name: "Mr. Mayuresh Balsaraf",
+      role: "Researcher",
+      image: "Mayuresh.jpeg",
+      bio: "Mr. Mayuresh leads our research team in developing advanced pose estimation algorithms for clinical applications.",
+      education: "Xavier's Institute Of Engineering, University Of Mumbai, Mahim",
+      expertise: ["Movement Analysis", "Clinical Biomechanics", "GAIT Analysis"],
     },
     {
-      name: "Michael Chen",
+      name: "Mrs. Aditi Satam",
       role: "AI Engineer",
-      image: "/team-member-2.jpg",
-      bio: "Michael specializes in computer vision and deep learning. He has developed several state-of-the-art pose estimation models and leads our technical development team.",
-      education: "M.S. in Computer Science, MIT",
-      expertise: ["Computer Vision", "Deep Learning", "TensorFlow"],
+      image: "aditi.jpeg",
+      bio: "Aditi specializes in computer vision and deep learning. She has developed several state-of-the-art pose estimation models and leads our technical development team.",
+      education: "Xavier's Institute Of Engineering, University Of Mumbai, Mahim",
+      expertise: ["Computer Vision", "Deep Learning", "TensorFlow", "AI in Healthcare"],
     },
     {
-      name: "Dr. Emily Rodriguez",
-      role: "Clinical Director",
-      image: "/team-member-3.jpg",
-      bio: "Dr. Rodriguez brings clinical expertise to our team. As a practicing physical therapist, she ensures our technology meets real-world clinical needs and provides valuable insights for product development.",
-      education: "Doctor of Physical Therapy, University of California",
-      expertise: ["Rehabilitation", "Orthopedics", "Clinical Assessment"],
+      name: "Mr. Vivek Rajkumar Singh",
+      role: "Full Stack AI Engineer",
+      image: "vivek.jpeg",
+      bio: "Mr. Vivek builds an end-to-end pose estimation system, integrating AI-powered motion analysis with scalable web applications for real-time human posture and GAIT tracking.",
+      education: "Xavier's Institute Of Engineering, University Of Mumbai, Mahim",
+      expertise: ["REST APIs", "Deep Learning", "Backend (Node.js / Express)", "Frontend (React / Next.js)"],
     },
     {
-      name: "James Wilson",
+      name: "Mr. Prathamesh Vaidya",
       role: "UX/UI Designer",
-      image: "/team-member-4.jpg",
-      bio: "James is passionate about creating intuitive user experiences. He designs our interfaces with a focus on accessibility and ease of use for healthcare professionals.",
-      education: "B.F.A. in Interaction Design, Rhode Island School of Design",
+      image: "PrathameshVaidya3.jpg",
+      bio: "Prathamesh is passionate about creating intuitive user experiences. He designs our interfaces with a focus on accessibility and ease of use for healthcare professionals.",
+      education: "Xavier's Institute Of Engineering, University Of Mumbai, Mahim",
       expertise: ["User Experience", "Healthcare UI", "Accessibility"],
     },
   ]
@@ -108,7 +108,7 @@ export default function AboutPage() {
               <div className="absolute -bottom-8 -left-20 w-72 h-72 bg-indigo-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
               <div className="relative">
                 <img
-                  src="/mission-image.jpg"
+                  src="dashboard1.jpg"
                   alt="Healthcare professionals using pose estimation technology"
                   className="rounded-lg shadow-xl"
                 />
