@@ -1,0 +1,337 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-rgb: 249, 250, 251;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --foreground-rgb: 255, 255, 255;
+    --background-rgb: 17, 24, 39;
+  }
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: rgb(var(--background-rgb));
+}
+
+/* Animations */
+@keyframes progress {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+@keyframes scan {
+  0% {
+    top: 0;
+  }
+  100% {
+    top: 100%;
+  }
+}
+
+.animate-progress {
+  animation: progress 2s ease-in-out infinite;
+}
+
+.animate-scan {
+  animation: scan 2s linear infinite;
+}
+
+@keyframes fadeInOut {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-pulse {
+  animation: fadeInOut 2s ease-in-out infinite;
+}
+
+.animate-spin-slow {
+  animation: spin 3s linear infinite;
+}
+
+.animate-fade-in-out {
+  animation: fadeInOut 5s ease-in-out infinite;
+}
+
+.animate-fade {
+  animation: fade 5s ease-in-out infinite;
+}
+
+@keyframes fade {
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Add these animation styles to enhance the loading experience */
+@keyframes pulse-blue {
+  0%,
+  100% {
+    background-color: rgba(59, 130, 246, 0.1);
+  }
+  50% {
+    background-color: rgba(59, 130, 246, 0.2);
+  }
+}
+
+.animate-pulse-blue {
+  animation: pulse-blue 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Enhanced pacman loader animations */
+.pacman-loader {
+  position: relative;
+  height: 60px;
+}
+
+.pacman {
+  position: relative;
+  width: 0;
+  height: 0;
+  animation: rotate 0.5s linear infinite;
+}
+
+.pacman-top,
+.pacman-bottom {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border: 20px solid #3b82f6; /* Blue color to match theme */
+  border-right: 20px solid transparent;
+  border-radius: 20px;
+}
+
+.pacman-top {
+  transform-origin: 100% 100%;
+  animation: chomp 0.5s linear infinite;
+}
+
+.pacman-bottom {
+  transform-origin: 100% 0%;
+  animation: chomp-bottom 0.5s linear infinite;
+}
+
+.dots {
+  position: absolute;
+  left: 50px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 20px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  background: #3b82f6; /* Blue color to match theme */
+  border-radius: 50%;
+  animation: dot 1s linear infinite;
+}
+
+.dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes chomp {
+  0% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-45deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes chomp-bottom {
+  0% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(45deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes dot {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+}
+
+/* Enhanced fade-in animation */
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Add a slide-in animation */
+@keyframes slideIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+/* Add a bounce animation */
+@keyframes bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-bounce-slow {
+  animation: bounce 2s ease-in-out infinite;
+}
+
+/* Heading animations */
+.animated-heading {
+  background-size: 200% auto;
+  background-image: linear-gradient(to right, #3b82f6 0%, #60a5fa 30%, #3b82f6 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shine 3s linear infinite;
+}
+
+@keyframes shine {
+  to {
+    background-position: 200% center;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Responsive typography */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  line-height: 1.2;
+}
+
+@media (max-width: 640px) {
+  h1 {
+    font-size: 1.75rem;
+  }
+  h2 {
+    font-size: 1.5rem;
+  }
+  h3 {
+    font-size: 1.25rem;
+  }
+}
+
+/* Focus styles for accessibility */
+:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Tooltip styles */
+.tooltip {
+  position: relative;
+}
+
+.tooltip:hover .tooltip-text {
+  visibility: visible;
+  opacity: 1;
+}
+
+.tooltip-text {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  z-index: 1;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #333;
+  color: #fff;
+  text-align: center;
+  border-radius: 6px;
+  padding: 5px 10px;
+  transition: opacity 0.3s;
+  white-space: nowrap;
+}
+
+.tooltip-text::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: #333 transparent transparent transparent;
+}
