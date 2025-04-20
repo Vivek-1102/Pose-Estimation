@@ -108,7 +108,7 @@ export default function AboutPage() {
               <div className="absolute -bottom-8 -left-20 w-72 h-72 bg-indigo-200 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000"></div>
               <div className="relative">
                 <img
-                  src="dashboard1.jpg"
+                  src="dumbbell_boy.jpg"
                   alt="Healthcare professionals using pose estimation technology"
                   className="rounded-lg shadow-xl"
                 />

@@ -48,7 +48,7 @@ export default function Dashboard() {
             </div>
             <div className="hidden md:block">
               <img
-                src="dashboard3.png"
+                src="generated_image3.jpeg"
                 alt="Pose Estimation Visualization"
                 className="w-full h-auto rounded-lg shadow-xl"
               />
@@ -70,12 +70,12 @@ export default function Dashboard() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center h-1/2">
             <div>
               <img
-                src="Dashboard2.jpg"
+                src="generated_image2.jpeg"
                 alt="Pose Estimation Diagram"
-                className="w-full h-auto rounded-lg shadow-lg"
+                className="w-full h-auto rounded-lg shadow-lg h-1/2"
               />
             </div>
             <div>

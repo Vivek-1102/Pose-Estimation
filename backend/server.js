@@ -93,11 +93,12 @@ class ClinicalAngleCalculator {
             },
 
             knee: () => {
-                const hip = getPoint('hip');
+                // const hip = getPoint('hip');
                 const knee = getPoint('knee');
                 const ankle = getPoint('ankle');
-                return this.validateAndCalculate([hip, knee, ankle], 
-                    () => this.calculateAngle(hip, knee, ankle));
+                const imaginaryPoint = { x: knee.x , y: knee.y - 100};
+                return this.validateAndCalculate([imaginaryPoint, knee, ankle], 
+                    () => this.calculateAngle(imaginaryPoint, knee, ankle));
             },
 
             hipFlexion: () => {
@@ -156,7 +157,7 @@ const drawAnnotations = (keypoints, canvas, metric, angle, side) => {
 
     // Draw keypoints
     keypoints.forEach((kp) => {
-        if (kp.score > 0.5) {
+        if (kp.score > 0.4) {
             ctx.beginPath();
             ctx.fillStyle = "red";
             ctx.arc(kp.x, kp.y, 3, 0, 2 * Math.PI); // Larger dots for better visibility
@@ -195,6 +196,12 @@ const drawAnnotations = (keypoints, canvas, metric, angle, side) => {
     }
 
     if ((metric === "popliteal" || metric === "R1" || metric === "R2") && knee) {
+        const imaginaryKneePoint = { x: knee.x, y: knee.y - 100 };
+        drawLine(ctx, knee, imaginaryKneePoint, "purple", [5, 5]); // Dotted line
+        drawPoint(ctx, imaginaryKneePoint, "purple", "Imaginary");
+    }
+
+    if ((metric === "knee" && knee && ankle)) {
         const imaginaryKneePoint = { x: knee.x, y: knee.y - 100 };
         drawLine(ctx, knee, imaginaryKneePoint, "purple", [5, 5]); // Dotted line
         drawPoint(ctx, imaginaryKneePoint, "purple", "Imaginary");
@@ -284,7 +291,7 @@ app.post('/analyze-metrics', (req, res) => {
                 // Dynamically get keypoints for the given metric & side
                 const metricKeypoints = getMetricKeypoints(metric, side);
                 const filteredKeypoints = keypoints.filter(kp =>
-                    metricKeypoints.includes(kp.name) && kp.score > 0.5
+                    metricKeypoints.includes(kp.name) && kp.score > 0.4
                 );
                 console.log("Filtered Keypoints: ",filteredKeypoints);
                 console.log("metricKeypoints: ",metricKeypoints);
@@ -302,7 +309,7 @@ app.post('/analyze-metrics', (req, res) => {
                     [metric]: {
                         angle,
                         confidence: poses[0].score,
-                        keypoints: keypoints.filter(kp => kp.score > 0.5),
+                        keypoints: keypoints.filter(kp => kp.score > 0.4),
                         image: `data:image/png;base64,${processedCanvas.toBuffer().toString('base64')}`
                     }
                 };

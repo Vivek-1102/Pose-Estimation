@@ -32,7 +32,7 @@ import html2canvas from "html2canvas"
 
 // You can change this to your actual backend URL
 const API_ENDPOINT = "http://localhost:5000/analyze-metrics"
-const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+const MAX_FILE_SIZE = 100 * 1024 * 1024 // 10MB
 
 // ============================================================================
 // DATA STRUCTURES
